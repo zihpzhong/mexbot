@@ -6,14 +6,15 @@ import signal
 from utils import dotdict
 
 
-class class_strategy:
+class strategy:
     def __init__(self):
         # default settings
-        self.period = 20
-        self.exchange = ''
-        self.market = ''
-        self.api_key = ''
-        self.secret = ''
+        self.settings = dotdict()
+        self.settings.period = 20
+        self.settings.exchange = ''
+        self.settings.market = ''
+        self.settings.api_key = ''
+        self.settings.secret = ''
 
         # register exit proc
         atexit.register(self.exit)
@@ -38,10 +39,10 @@ class class_strategy:
             try:
                 self.sanity_check()
                 self.print_status()
-                your_logic();
+                your_logic()
             except (KeyboardInterrupt, SystemExit):
                 sys.exit()
-            sleep(self.period)
+            sleep(self.settings.period)
 
 ## Valiables
 open = []
@@ -49,4 +50,3 @@ high = []
 low = []
 close = []
 volume = []
-strategy = class_strategy()

@@ -2,7 +2,7 @@
 from strategy import *
 
 def my_logic():
-	print('test')
+	print("my_logic")	
 
-strategy.period = 3
-strategy.run_loop(my_logic)
+myst = strategy()
+myst.run_loop(my_logic)
