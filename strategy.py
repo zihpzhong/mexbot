@@ -6,8 +6,11 @@ import signal
 from utils import dotdict
 
 
-class strategy:
-    def __init__(self):
+class Strategy:
+    def __init__(self, your_logic):
+        # set your logic
+        self.your_logic = your_logic
+
         # default settings
         self.settings = dotdict()
         self.settings.period = 20
@@ -33,20 +36,21 @@ class strategy:
     def print_status(self):
         print('print_status')
 
-    def run_loop(self, your_logic):
+    def run_loop(self):
         self.init()
         while True:
             try:
+                params = {
+                    'strategy': self,
+                    'close':210,
+                    'open':200,
+                    'high':250,
+                    'low':180,
+                    'volume':500,
+                }
                 self.sanity_check()
                 self.print_status()
-                your_logic()
+                self.your_logic(**params)
             except (KeyboardInterrupt, SystemExit):
                 sys.exit()
             sleep(self.settings.period)
-
-## Valiables
-open = []
-high = []
-low = []
-close = []
-volume = []
