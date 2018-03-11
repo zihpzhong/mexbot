@@ -4,60 +4,80 @@ import sys
 import atexit
 import signal
 from utils import dotdict
-
+import ccxt
+import pandas as pd
 
 class Strategy:
     def __init__(self, your_logic):
 
         # set property
         self.your_logic = your_logic
-        self.period = 20
+        self.interval = 5
 
         # settings
         self.settings = dotdict()
-        self.settings.exchange = ''
-        self.settings.market = ''
+        self.settings.exchange = 'bitmex'
+        self.settings.symbol = 'BTC/USD'
         self.settings.api_key = ''
         self.settings.secret = ''
+        self.settings.timeframe = '1m'
 
         # risk settings
         self.risk = dotdict()
-        self.risk.allow_entry_long = True
-        self.risk.allow_entry_short = True
-        self.risk.max_position_size = 5
-        self.risk.max_drawdown = 100000
+        self.risk.max_position_size = 100
+        self.risk.max_drawdown = 1000
 
     def start(self):
-        print('start')
+        self.exchange = getattr(ccxt, self.settings.exchange)({
+            'apiKey': self.settings.api_key,
+            'secret': self.settings.secret,
+            })
+        self.exchange.load_markets()
+        self.symbol = self.settings.symbol
+        self.timeframe = self.settings.timeframe
 
     def stop(self):
         cancel_all();
         close_all();
 
+    def fetch_bitmex_ohlc(self):
+        market = self.exchange.market(self.symbol)
+        req = {
+            'symbol': market['id'],
+            'binSize': self.exchange.timeframes[self.timeframe],
+            'partial': True,     # True == include yet-incomplete current bins
+            'reverse': True,
+        }
+        res = self.exchange.publicGetTradeBucketed(req)
+        df = pd.DataFrame(res)
+        return dotdict({
+            'df': df,
+            'time':df['timestamp'],
+            'close':df['close'],
+            'open':df['open'],
+            'high':df['high'],
+            'low':df['low'],
+            'volume':df['volume']})
+
     def sanity_check(self):
-        print('sanity_check')
+        pass
 
     def print_status(self):
-        print('print_status')
+        pass
 
     def run_loop(self):
         self.start()
         while True:
             try:
-                params = {
-                    'strategy': self,
-                    'close':210,
-                    'open':200,
-                    'high':250,
-                    'low':180,
-                    'volume':500,
-                }
+                params = self.fetch_bitmex_ohlc()
+                params.strategy = self
+
                 self.sanity_check()
                 self.print_status()
                 self.your_logic(**params)
             except (KeyboardInterrupt, SystemExit):
                 break
-            sleep(self.period)
+            sleep(self.interval)
         self.stop()
 
     def entry(self, id, long, qty, limit = 0, stop = 0):
