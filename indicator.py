@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 
-def sma(series, period):
-    return series[0:period].mean()
+def sma(series, window):
+    return series.rolling(window).mean()
 
-def ema(series, period):
-    return series[period-1::-1].ewm(span=period).mean()[0]
+def ema(series, window):
+    return series[-1::-1].ewm(span=window).mean()
 
-def highest(series, period):
-    return series[0:period].max()
+def highest(series, window):
+    return series[-1::-1].rolling(window).max()
 
-def lowest(series, period):
-    return series[0:length].min()
+def lowest(series, window):
+	return series[-1::-1].rolling(window).min()
