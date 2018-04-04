@@ -5,8 +5,13 @@ import sys
 import ccxt
 import pandas as pd
 from utils import dotdict
-from indicator import highest, lowest
+from indicator import *
 from settings import settings
+from pprint import pprint
+
+import matplotlib
+matplotlib.use('tkagg')
+import matplotlib.pyplot as plt
 
 print(ccxt.__version__)
 
@@ -14,10 +19,23 @@ exchange = None
 orders = dotdict()
 position = dotdict()
 balance = dotdict()
+ticker = dotdict()
+
+qty_lot = 100
+
+profit_trigger = 80
+loss_trigger = -80
+
+profit_trigger_pct = 0.25
+loss_trigger_pct = -0.25
+
+breakout_in = 22
+breakout_out = 21
+bias_length = 4
 
 def fetch_ticker(symbol=settings.symbol, timeframe=settings.timeframe):
     ticker = dotdict(exchange.fetchTicker(symbol, params={'binSize': exchange.timeframes[timeframe]}))
-    #print(ticker)
+    pprint(ticker)
     print("TICK: ohlc {open} {high} {low} {close} bid {bid} ask {ask}".format(**ticker))
     return ticker
 
@@ -28,7 +46,7 @@ def fetch_ohlcv(symbol=settings.symbol, timeframe=settings.timeframe):
     req = {
         'symbol': market['id'],
         'binSize': exchange.timeframes[timeframe],
-        'partial': True,     # True == include yet-incomplete current bins
+        'partial': False,     # True == include yet-incomplete current bins
         'reverse': True,
     }
     res = exchange.publicGetTradeBucketed(req)
@@ -42,14 +60,7 @@ def fetch_ohlcv(symbol=settings.symbol, timeframe=settings.timeframe):
     #     'volume':df['volume'][0],
     # }
     # print("OHLCV: {open} {high} {low} {close} {volume}".format(**d))
-    return dotdict({
-        'df': df,
-        'time':df['timestamp'],
-        'close':df['close'],
-        'open':df['open'],
-        'high':df['high'],
-        'low':df['low'],
-        'volume':df['volume']})
+    return (df['open'], df['high'], df['low'], df['close'], df['volume'])
 
 
 def fetch_position(symbol=settings.symbol):
@@ -63,21 +74,43 @@ def fetch_position(symbol=settings.symbol):
     """
     res = exchange.privateGetPosition()
     pos = [x for x in res if x['symbol'] == exchange.market(symbol)['id']]
+    pprint(pos)
     if len(pos):
         pos = dotdict(pos[0])
         pos.timestamp = pd.to_datetime(pos.timestamp)
+        if pos.avgCostPrice is not None:
+            pos.position_avg_price = pos.avgCostPrice
+            current_cost = pos.currentQty / pos.avgCostPrice
+            if pos.currentQty > 0:
+                unrealized_cost = pos.currentQty / ticker.ask
+                pos.profit_and_loss = int((current_cost - unrealized_cost) * 100000000)
+                pos.profit_and_loss_pct = ((current_cost / unrealized_cost) * 100) - 100
+            else:
+                unrealized_cost = pos.currentQty / ticker.bid
+                pos.profit_and_loss = int((current_cost - unrealized_cost) * 100000000)
+                pos.profit_and_loss_pct = 100 - ((current_cost / unrealized_cost) * 100)
+        else:
+            pos.profit_and_loss = 0
+            pos.profit_and_loss_pct = 0
+            pos.position_avg_price = 0
+        #pos.profit_and_loss = pos.simplePnl * 100
+        #pos.profit_and_loss_pct = pos.simplePnlPcnt * 100
     else:
         pos = dotdict()
         pos.currentQty = 0
         pos.avgCostPrice = None
         pos.commission = 0
         pos.lastPrice = None
-    print("POSITION: qty {currentQty} cost {avgCostPrice} last {lastPrice}".format(**pos))
+        pos.position_avg_price = 0
+        pos.profit_and_loss = 0
+        pos.profit_and_loss_pct = 0
+    print("POSITION: qty {currentQty} cost {position_avg_price} pnl {profit_and_loss}({profit_and_loss_pct:.2f}%) {realisedPnl}".format(**pos))
     return pos
 
 
 def fetch_balance():
     balance = dotdict(exchange.fetch_balance())
+    pprint(balance)
     print("BALANCE: free {free} used {used} total {total}".format(**balance.BTC))
     return balance
 
@@ -99,37 +132,37 @@ def cancel_order_all(symbol=settings.symbol):
         print("CANCEL: {orderID} {side} {orderQty} {price}".format(**r))
 
 
-def create_order(side, qty, limit, stop, symbol=settings.symbol):
+def create_order(side, qty, limit, stop, symbol):
     type = 'market'
     params = {}
-    if stop > 0 and limit > 0:
+    if stop is not None and limit is not None:
         type = 'stopLimit'
         params['stopPx'] = stop
         params['execInst'] = 'LastPrice'
         params['price'] = limit
-    elif stop > 0:
+    elif stop is not None:
         type = 'stop'
         params['stopPx'] = stop
         params['execInst'] = 'LastPrice'
-    elif limit > 0:
+    elif limit is not None:
         type = 'limit'
         params['price'] = limit
     res = exchange.create_order(symbol, type, side, qty, None, params)
-    print("ORDER: {orderID} {side} {orderQty} {price}".format(**res['info']))
+    print("ORDER: {orderID} {side} {orderQty} {price}({stopPx})".format(**res['info']))
     return dotdict(res)
 
 
-def edit_order(id, side, qty, limit, stop, symbol=settings.symbol):
+def edit_order(id, side, qty, limit, stop, symbol):
     type = 'market'
     params = {}
-    if stop > 0 and limit > 0:
+    if stop is not None and limit is not None:
         type = 'stopLimit'
         params['stopPx'] = stop
         params['price'] = limit
-    elif stop > 0:
+    elif stop is not None:
         type = 'stop'
         params['stopPx'] = stop
-    elif limit > 0:
+    elif limit is not None:
         type = 'limit'
         params['price'] = limit
     res = exchange.edit_order(id, symbol, type, side, qty, None, params)
@@ -137,76 +170,86 @@ def edit_order(id, side, qty, limit, stop, symbol=settings.symbol):
     return dotdict(res)
 
 
-def long(myid, qty, limit=0, stop=0, symbol=settings.symbol):
-    """買い"""
-    total = qty
-    # 現在のポジションが買いの場合、currentQtyを加算する
+def order(myid, side, qty, limit=None, stop=None, symbol=settings.symbol):
+    """注文"""
+
+    qty_total = qty
+    qty_limit = settings.max_position_size
+
+    # 買いポジあり
     if position.currentQty > 0:
-        total = total + position.currentQty
-
-    # ポジション最大サイズに抑える
-    if total > settings.max_position_size:
-        qty = qty - (total - settings.max_position_size)
-
-    # 買う必要があるなら注文を出す
-    if qty > 0:
-        # 売りポジションがある場合、清算する
-        if position.currentQty < 0:
-            qty = qty - position.currentQty
-
-        # 注文状況を確認
-        if myid in orders:
-            order_id = orders[myid].id
-            order = exchange.fetchOrder(order_id)
-            if order['status'] == 'open':
-                order = edit_order(order_id, 'buy', qty, limit, stop)
-            else:
-                order = create_order('buy', qty, limit, stop)
+        # 買い増し
+        if side == 'buy':
+            # 現在のポジ数を加算
+            qty_total = qty_total + position.currentQty
         else:
-            order = create_order('buy', qty, limit, stop)
-        orders[myid] = order
+            # 反対売買の場合、ドテンできるように上限を引き上げる
+            qty_limit = qty_limit + position.currentQty
 
-
-def short(myid, qty, limit=0, stop=0, symbol=settings.symbol):
-    """売り"""
-    # 現在のポジションが売りの場合、currentQtyを加算する
-    # 買いポジションの場合、反転させるため加算する
-    total = qty
+    # 売りポジあり
     if position.currentQty < 0:
-        total = total - position.currentQty
+        # 売りまし
+        if side == 'sell':
+            # 現在のポジ数を加算
+            qty_total = qty_total + -position.currentQty
+        else:
+            # 反対売買の場合、ドテンできるように上限を引き上げる
+            qty_limit = qty_limit + -position.currentQty
 
-    # ポジション最大サイズに抑える
-    if total > settings.max_position_size:
-        qty = qty - (total - settings.max_position_size)
+    # 購入数をポジション最大サイズに抑える
+    if qty_total > qty_limit:
+        qty = qty - (qty_total - qty_limit)
 
-    # 得る必要があるなら注文を出す
+    # 注文
     if qty > 0:
-        # 買いポジションがある場合、清算する
-        if position.currentQty > 0:
-            qty = qty + position.currentQty
         if myid in orders:
             order_id = orders[myid].id
-            order = exchange.fetchOrder(order_id)
-            if order['status'] == 'open':
-                order = edit_order(order_id, 'sell', qty, limit, stop)
+            order = dotdict(exchange.fetchOrder(order_id))
+            # Todo
+            # 1.部分利確の確認
+            # 2.指値STOP注文の場合、トリガーされたかの確認
+            # どちのら場合もキャンセル必要と思う
+            if order.status == 'open':
+                if order.type == 'stoplimit' and order.info['triggered'] == 'StopOrderTriggered':
+                    pprint(order)
+                    order = exchange.cancel_order(order_id)
+                    pprint(order)
+                    order = create_order(side, qty, limit, stop, symbol)
+                    pprint(order)
+                else:
+                    order = edit_order(order_id, side, qty, limit, stop, symbol)
             else:
-                order = create_order('sell', qty, limit, stop)
+                order = create_order(side, qty, limit, stop, symbol)
         else:
-            order = create_order('sell', qty, limit, stop)
+            order = create_order(side, qty, limit, stop, symbol)
         orders[myid] = order
+
+
+def entry(myid, side, qty, limit=None, stop=None, symbol=settings.symbol):
+    """注文"""
+    # 買いポジションがある場合、清算する
+    if side=='sell' and position.currentQty > 0:
+        qty = qty + position.currentQty
+
+    # 売りポジションがある場合、清算する
+    if side=='buy' and position.currentQty < 0:
+        qty = qty - position.currentQty
+
+    # 注文
+    order(myid, side, qty, limit, stop, symbol)
 
 
 if __name__ == "__main__":
     # 取引所セットアップ
     if settings.use_testnet:
         exchange = getattr(ccxt, settings.exchange)({
-            'apiKey': settings.testnet_api_key,
+            'apiKey': settings.testnet_apiKey,
             'secret': settings.testnet_secret,
             })
         exchange.urls['api'] = exchange.urls['test']
     else:
         exchange = getattr(ccxt, settings.exchange)({
-            'apiKey': settings.api_key,
+            'apiKey': settings.apiKey,
             'secret': settings.secret,
             })
     exchange.load_markets()
@@ -219,26 +262,53 @@ if __name__ == "__main__":
             # ティッカー取得
             ticker = fetch_ticker()
 
-            # 資金情報取得
-            balance = fetch_balance()
-
             # ポジション取得
             position = fetch_position()
 
-            # 足取得
-            ohlc = fetch_ohlcv()
+            # 資金情報取得
+            balance = fetch_balance()
 
-            # エントリー/エグジット判定
-            higher = highest(ohlc.high, 5)[0]
-            lower = lowest(ohlc.low, 5)[0]
+            # 足取得
+            (open, high, low, close, volume) = fetch_ohlcv()
+
+            # エントリー/エグジット
+            bias = stdev(close, bias_length)
+            long_entry_price = highest(high, breakout_in) + bias
+            short_entry_price = lowest(low, breakout_in) - bias
+
+            # df = pd.DataFrame({
+            #     'close': close,
+            #     'long': long_entry_price,
+            #     'short': short_entry_price})
+            # df.plot()
+            # plt.show()
+
+            # long_entry_price = max(highest(close, breakout_in)[0], highest(open, breakout_in)[0])
+            # short_entry_price = min(lowest(close, breakout_in)[0], lowest(open, breakout_in)[0])
+
+            # long_exit_price = min(lowest(close, breakout_out)[0], lowest(open, breakout_out)[0])
+            # short_exit_price = max(highest(close, breakout_out)[0], highest(open, breakout_out)[0])
 
             # 注文
-            long('L', qty=1000, stop=higher)
-            short('S', qty=1000, stop=lower)
+            entry('L', 'buy', qty=qty_lot, stop=int(long_entry_price[0]))
+            entry('S', 'sell', qty=qty_lot, stop=int(short_entry_price[0]))
+            # order('L', 'buy', qty=qty_lot, limit=long_entry_price, stop=long_entry_price+0.5)
+            # order('S', 'sell', qty=qty_lot, limit=short_entry_price, stop=short_entry_price-0.5)
+            # entry('L', 'buy', qty=qty_lot, limit=long_entry_price, stop=long_entry_price+0.5)
+            # entry('S', 'sell', qty=qty_lot, limit=short_entry_price, stop=short_entry_price-0.5)
 
-            # 次の足確定後、10秒経過するまで待機
-            # delta = ohlc.time[0] - datetime.now() + timedelta(seconds=10)
-            # sleep(delta.seconds)
+            # 利確/損切り
+            # if position.currentQty > 0:
+            #     order('S_lc', side='sell', qty=position.currentQty, limit=long_exit_price, stop=long_exit_price-0.5)
+            # if position.currentQty < 0:
+            #     order('L_lc', side='buy', qty=-position.currentQty, limit=short_exit_price, stop=short_exit_price+0.5)
+
+            if position.currentQty > 0:
+                order('S_lc', side='sell', qty=position.currentQty, limit=int(position.position_avg_price + profit_trigger))
+            if position.currentQty < 0:
+                order('L_lc', side='buy', qty=-position.currentQty, limit=int(position.position_avg_price - profit_trigger))
+
+            # 待機
             sleep(settings.interval)
 
         except ccxt.DDoSProtection as e:
