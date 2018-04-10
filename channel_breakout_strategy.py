@@ -7,13 +7,6 @@ import pandas as pd
 from utils import dotdict
 from indicator import *
 from settings import settings
-from pprint import pprint
-
-import matplotlib
-matplotlib.use('tkagg')
-import matplotlib.pyplot as plt
-
-print(ccxt.__version__)
 
 exchange = None
 orders = dotdict()
@@ -23,20 +16,16 @@ ticker = dotdict()
 
 qty_lot = 100
 
-profit_trigger = 80
-loss_trigger = -80
+profit_trigger = 20
+loss_trigger = -15
 
-profit_trigger_pct = 0.25
-loss_trigger_pct = -0.25
-
-breakout_in = 22
-breakout_out = 21
-bias_length = 4
+breakout_in = 11
+breakout_out = 5
+bias_length = 2
 
 def fetch_ticker(symbol=settings.symbol, timeframe=settings.timeframe):
     ticker = dotdict(exchange.fetchTicker(symbol, params={'binSize': exchange.timeframes[timeframe]}))
-    pprint(ticker)
-    print("TICK: ohlc {open} {high} {low} {close} bid {bid} ask {ask}".format(**ticker))
+    print("{datetime} TICK: ohlc {open} {high} {low} {close} bid {bid} ask {ask}".format(**ticker))
     return ticker
 
 
@@ -46,12 +35,13 @@ def fetch_ohlcv(symbol=settings.symbol, timeframe=settings.timeframe):
     req = {
         'symbol': market['id'],
         'binSize': exchange.timeframes[timeframe],
-        'partial': False,     # True == include yet-incomplete current bins
-        'reverse': True,
+        'partial': 'false',     # True == include yet-incomplete current bins
+        'reverse': 'true',
     }
     res = exchange.publicGetTradeBucketed(req)
     df = pd.DataFrame(res)
-    df['timestamp'] = pd.to_datetime(df['timestamp']) + timedelta(hours=+9)
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    #df['timestamp'] = pd.to_datetime(df['timestamp']) + timedelta(hours=+9)
     # d = {
     #     'open':df['close'][0],
     #     'high':df['high'][0],
@@ -74,12 +64,11 @@ def fetch_position(symbol=settings.symbol):
     """
     res = exchange.privateGetPosition()
     pos = [x for x in res if x['symbol'] == exchange.market(symbol)['id']]
-    pprint(pos)
     if len(pos):
         pos = dotdict(pos[0])
         pos.timestamp = pd.to_datetime(pos.timestamp)
         if pos.avgCostPrice is not None:
-            pos.position_avg_price = pos.avgCostPrice
+            pos.avg_price = pos.avgCostPrice
             current_cost = pos.currentQty / pos.avgCostPrice
             if pos.currentQty > 0:
                 unrealized_cost = pos.currentQty / ticker.ask
@@ -92,7 +81,7 @@ def fetch_position(symbol=settings.symbol):
         else:
             pos.profit_and_loss = 0
             pos.profit_and_loss_pct = 0
-            pos.position_avg_price = 0
+            pos.avg_price = 0
         #pos.profit_and_loss = pos.simplePnl * 100
         #pos.profit_and_loss_pct = pos.simplePnlPcnt * 100
     else:
@@ -101,16 +90,15 @@ def fetch_position(symbol=settings.symbol):
         pos.avgCostPrice = None
         pos.commission = 0
         pos.lastPrice = None
-        pos.position_avg_price = 0
+        pos.avg_price = 0
         pos.profit_and_loss = 0
         pos.profit_and_loss_pct = 0
-    print("POSITION: qty {currentQty} cost {position_avg_price} pnl {profit_and_loss}({profit_and_loss_pct:.2f}%) {realisedPnl}".format(**pos))
+    print("{currentTimestamp} POSITION: qty {currentQty} cost {avg_price} pnl {profit_and_loss}({profit_and_loss_pct:.2f}%) {realisedPnl}".format(**pos))
     return pos
 
 
 def fetch_balance():
     balance = dotdict(exchange.fetch_balance())
-    pprint(balance)
     print("BALANCE: free {free} used {used} total {total}".format(**balance.BTC))
     return balance
 
@@ -120,7 +108,7 @@ def close_position(symbol=settings.symbol):
     market = exchange.market(symbol)
     req = {'symbol': market['id']}
     res = exchange.privatePostOrderClosePosition(req)
-    print("CLOSE: {orderID} {side} {orderQty} {price}".format(**res))
+    print("{timestamp} CLOSE: {orderID} {side} {orderQty} {price}".format(**res))
 
 
 def cancel_order_all(symbol=settings.symbol):
@@ -129,7 +117,7 @@ def cancel_order_all(symbol=settings.symbol):
     req = {'symbol': market['id']}
     res = exchange.privateDeleteOrderAll(req)
     for r in res:
-        print("CANCEL: {orderID} {side} {orderQty} {price}".format(**r))
+        print("{timestamp} CANCEL: {orderID} {side} {orderQty} {price}".format(**r))
 
 
 def create_order(side, qty, limit, stop, symbol):
@@ -148,7 +136,7 @@ def create_order(side, qty, limit, stop, symbol):
         type = 'limit'
         params['price'] = limit
     res = exchange.create_order(symbol, type, side, qty, None, params)
-    print("ORDER: {orderID} {side} {orderQty} {price}({stopPx})".format(**res['info']))
+    print("{timestamp} ORDER: {orderID} {side} {orderQty} {price}({stopPx})".format(**res['info']))
     return dotdict(res)
 
 
@@ -166,7 +154,7 @@ def edit_order(id, side, qty, limit, stop, symbol):
         type = 'limit'
         params['price'] = limit
     res = exchange.edit_order(id, symbol, type, side, qty, None, params)
-    print("EDIT: {orderID} {side} {orderQty} {price}".format(**res['info']))
+    print("{timestamp} EDIT: {orderID} {side} {orderQty} {price}".format(**res['info']))
     return dotdict(res)
 
 
@@ -211,11 +199,8 @@ def order(myid, side, qty, limit=None, stop=None, symbol=settings.symbol):
             # どちのら場合もキャンセル必要と思う
             if order.status == 'open':
                 if order.type == 'stoplimit' and order.info['triggered'] == 'StopOrderTriggered':
-                    pprint(order)
                     order = exchange.cancel_order(order_id)
-                    pprint(order)
                     order = create_order(side, qty, limit, stop, symbol)
-                    pprint(order)
                 else:
                     order = edit_order(order_id, side, qty, limit, stop, symbol)
             else:
@@ -257,6 +242,8 @@ if __name__ == "__main__":
     # 現在のポジションをすべて閉じる
     close_position()
 
+    # 最後にOHLCを取得した時間
+
     while True:
         try:
             # ティッカー取得
@@ -266,22 +253,16 @@ if __name__ == "__main__":
             position = fetch_position()
 
             # 資金情報取得
-            balance = fetch_balance()
+            #balance = fetch_balance()
 
             # 足取得
             (open, high, low, close, volume) = fetch_ohlcv()
 
             # エントリー/エグジット
-            bias = stdev(close, bias_length)
+            #bias = stdev(close, bias_length)
+            bias = 1
             long_entry_price = highest(high, breakout_in) + bias
             short_entry_price = lowest(low, breakout_in) - bias
-
-            # df = pd.DataFrame({
-            #     'close': close,
-            #     'long': long_entry_price,
-            #     'short': short_entry_price})
-            # df.plot()
-            # plt.show()
 
             # long_entry_price = max(highest(close, breakout_in)[0], highest(open, breakout_in)[0])
             # short_entry_price = min(lowest(close, breakout_in)[0], lowest(open, breakout_in)[0])
@@ -290,31 +271,37 @@ if __name__ == "__main__":
             # short_exit_price = max(highest(close, breakout_out)[0], highest(open, breakout_out)[0])
 
             # 注文
-            entry('L', 'buy', qty=qty_lot, stop=int(long_entry_price[0]))
-            entry('S', 'sell', qty=qty_lot, stop=int(short_entry_price[0]))
-            # order('L', 'buy', qty=qty_lot, limit=long_entry_price, stop=long_entry_price+0.5)
-            # order('S', 'sell', qty=qty_lot, limit=short_entry_price, stop=short_entry_price-0.5)
+            # entry('L', 'buy', qty=qty_lot, stop=int(long_entry_price[0]), limit=int(long_entry_price[0])-0.5)
+            # entry('S', 'sell', qty=qty_lot, stop=int(short_entry_price[0]), limit=int(short_entry_price[0])+0.5)
+            if position.currentQty == 0:
+                order('L', 'buy', qty=qty_lot, limit=long_entry_price[0], stop=int(long_entry_price[0]-0.5))
+                order('S', 'sell', qty=qty_lot, limit=short_entry_price[0], stop=int(short_entry_price[0]+0.5))
             # entry('L', 'buy', qty=qty_lot, limit=long_entry_price, stop=long_entry_price+0.5)
             # entry('S', 'sell', qty=qty_lot, limit=short_entry_price, stop=short_entry_price-0.5)
 
             # 利確/損切り
-            # if position.currentQty > 0:
-            #     order('S_lc', side='sell', qty=position.currentQty, limit=long_exit_price, stop=long_exit_price-0.5)
-            # if position.currentQty < 0:
-            #     order('L_lc', side='buy', qty=-position.currentQty, limit=short_exit_price, stop=short_exit_price+0.5)
-
             if position.currentQty > 0:
-                order('S_lc', side='sell', qty=position.currentQty, limit=int(position.position_avg_price + profit_trigger))
-            if position.currentQty < 0:
-                order('L_lc', side='buy', qty=-position.currentQty, limit=int(position.position_avg_price - profit_trigger))
+                pnl = ticker.ask - position.avg_price
+                if pnl >= profit_trigger:
+                    order('L_exit', side='sell', qty=position.currentQty, limit=ticker.ask)
+                elif pnl <= loss_trigger:
+                    order('L_exit', side='sell', qty=position.currentQty)
+            elif position.currentQty < 0:
+                pnl = position.avg_price - ticker.bid
+                if pnl >= profit_trigger:
+                    order('S_exit', side='buy', qty=-position.currentQty, limit=ticker.bid)
+                elif pnl <= loss_trigger:
+                    order('S_exit', side='buy', qty=-position.currentQty)
 
             # 待機
             sleep(settings.interval)
 
         except ccxt.DDoSProtection as e:
             print(type(e).__name__, e.args, 'DDoS Protection (ignoring)')
+            sleep(5)
         except ccxt.RequestTimeout as e:
             print(type(e).__name__, e.args, 'Request Timeout (ignoring)')
+            sleep(5)
         except ccxt.ExchangeNotAvailable as e:
             print(type(e).__name__, e.args, 'Exchange Not Available due to downtime or maintenance (ignoring)')
             sleep(60)
@@ -327,3 +314,6 @@ if __name__ == "__main__":
             cancel_order_all()
             close_position()
             sys.exit()
+        except Exception as e:
+            print(e)
+            sleep(5)

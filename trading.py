@@ -1,23 +1,29 @@
 # -*- coding: utf-8 -*-
-from indicator import *
-from strategy import *
+from datetime import datetime
+from strategy import Strategy, Trading
 
-def my_logic(time, open, close, high, low, volume, strategy, **env):
-	# print(time[0])
-	# print(open[0])
-	# print(close[0])
-	# print(high[0])
-	# print(low[0])
-	# print(volume[0])
-	d = {
-		'close': close[0],
-		'sma': sma(close, 10),
-		'ema': ema(close, 10),
-		'highest': highest(close, 10),
-		'lowest': lowest(close, 10),
-	}
-	print('{close},{sma},{ema},{highest},{lowest},'.format(**d))
+class mylogic(Trading):
+    def setup(self, strategy):
+    	print('setup')
 
-myst = Strategy(my_logic)
-myst.interval = 5
-myst.run_loop()
+    def loop(self, strategy):
+        funding = strategy.fetch_funding()
+        timestamp = funding['timestamp']
+        print(funding.head())
+        print(datetime.utcnow())
+        delta = (timestamp[0] - timestamp[1])
+        next = timestamp[0] + delta
+        print(next)
+        print(delta)
+        rate = funding.fundingRate
+        print(rate[0])
+
+
+strategy = Strategy(mylogic(), 60)
+strategy.settings.timeframe = '1m'
+strategy.settings.interval = 10
+strategy.settings.partial_ohlcv = True
+strategy.testnet.use = True
+strategy.testnet.apiKey = 'JmvnFgDTLwTjJb2RiKhXJ-7G'
+strategy.testnet.secret = '0gW-9UhhfVLaNDbIviLh_AwuWmEk5xHtoWNzrhJcGh0fFdbb'
+strategy.start()
