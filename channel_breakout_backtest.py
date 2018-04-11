@@ -8,10 +8,11 @@ def lowest(series, window):
 	return series.rolling(window).min()
 
 # テストデータ読み込み
-data = pd.read_csv('bitmex_20180410_5m.csv',
-	names=('timestamp','open','high','low','close', 'trades', 'volume', 'vwap'),
+data = pd.read_csv('bitmex_20180410_1m.csv',
+	#names=('timestamp','close','foreignNotional','high','homeNotional','lastSize','low','open','symbol','trades','turnover','volume','vwap'),
 	index_col='timestamp',
 	parse_dates=True)
+print(data.head())
 
 # インジケーター作成
 breakout_in = 22

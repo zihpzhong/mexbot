@@ -21,15 +21,15 @@ class Strategy:
         # トレーディングロジック設定
         self.yourlogic = yourlogic
 
-        # 動作タイミング
-        self.settings.interval = interval
-
         # 取引所情報
         self.settings = dotdict()
         self.settings.exchange = 'bitmex'
         self.settings.symbol = 'BTC/USD'
         self.settings.api_key = ''
         self.settings.secret = ''
+
+        # 動作タイミング
+        self.settings.interval = interval
 
         # OHLCV設定
         self.settings.timeframe = '1m'
@@ -62,27 +62,23 @@ class Strategy:
         # ohlcv情報
         self.df_ohlcv = None
 
-    def safe_symbol(self, symbol):
-        if symbol is None:
-            symbol = self.settings.symbol
-        return symbol
-
-    def safe_timeframe(self, timeframe):
-        if timeframe is None:
-            timeframe = self.settings.timeframe
-        return timeframe
+    @staticmethod
+    def safe_value(value, default):
+        if value is None:
+            value = default
+        return value
 
     def fetch_ticker(self, symbol=None, timeframe=None):
-        symbol = self.safe_symbol(symbol)
-        timeframe = self.safe_timeframe(timeframe)
+        symbol = symbol or self.settings.symbol
+        timeframe = timeframe or self.settings.timeframe
         ticker = dotdict(self.exchange.fetchTicker(symbol, params={self.exchange.timeframes[timeframe]}))
         #print("{datetime} TICK: ohlc {open} {high} {low} {close} bid {bid} ask {ask}".format(**ticker))
         return ticker
 
     def fetch_ohlcv(self, symbol=None, timeframe=None):
         """OHLCVを取得"""
-        symbol = self.safe_symbol(symbol)
-        timeframe = self.safe_timeframe(timeframe)
+        symbol = symbol or self.settings.symbol
+        timeframe = timeframe or self.settings.timeframe
         market = self.exchange.market(symbol)
         req = {
             'symbol': market['id'],
@@ -97,7 +93,7 @@ class Strategy:
 
     def fetch_position(self, symbol=None):
         """現在のポジションを取得"""
-        symbol = self.safe_symbol(symbol)
+        symbol = symbol or self.settings.symbol
         res = self.exchange.privateGetPosition()
         market = self.exchange.market(symbol)
         pos = [x for x in res if x['symbol'] == market['id']]
@@ -141,7 +137,7 @@ class Strategy:
 
     def fetch_funding(self, symbol=None):
         """資金調達"""
-        symbol = self.safe_symbol(symbol)
+        symbol = symbol or self.settings.symbol
         market = self.exchange.market(symbol)
         req = {
             'symbol': market['id'],
@@ -155,7 +151,7 @@ class Strategy:
 
     def close_position(self, symbol=None):
         """現在のポジションを閉じる"""
-        symbol = self.safe_symbol(symbol)
+        symbol = symbol or self.settings.symbol
         market = self.exchange.market(symbol)
         req = {'symbol': market['id']}
         res = self.exchange.privatePostOrderClosePosition(req)
@@ -163,7 +159,7 @@ class Strategy:
 
     def cancel_order_all(self, symbol=None):
         """現在の注文をキャンセル"""
-        symbol = self.safe_symbol(symbol)
+        symbol = symbol or self.settings.symbol
         market = self.exchange.market(symbol)
         req = {'symbol': market['id']}
         res = self.exchange.privateDeleteOrderAll(req)
@@ -171,7 +167,7 @@ class Strategy:
             print("{timestamp} CANCEL: {orderID} {side} {orderQty} {price}".format(**r))
 
     def create_order(self, side, qty, limit, stop, symbol):
-        symbol = self.safe_symbol(symbol)
+        symbol = symbol or self.settings.symbol
         type = 'market'
         params = {}
         if stop is not None and limit is not None:
@@ -191,7 +187,7 @@ class Strategy:
         return dotdict(res)
 
     def edit_order(self, id, side, qty, limit, stop, symbol):
-        symbol = self.safe_symbol(symbol)
+        symbol = symbol or self.settings.symbol
         type = 'market'
         params = {}
         if stop is not None and limit is not None:
@@ -210,7 +206,7 @@ class Strategy:
 
     def order(self, myid, side, qty, limit=None, stop=None, symbol=None):
         """注文"""
-        symbol = self.safe_symbol(symbol)
+        symbol = symbol or self.settings.symbol
 
         qty_total = qty
         qty_limit = self.risk.max_position_size
@@ -262,7 +258,7 @@ class Strategy:
 
     def entry(self, myid, side, qty, limit=None, stop=None, symbol=None):
         """注文"""
-        symbol = self.safe_symbol(symbol)
+        symbol = symbol or self.settings.symbol
 
         # 買いポジションがある場合、清算する
         if side=='sell' and self.position.current_qty > 0:
@@ -275,7 +271,7 @@ class Strategy:
         # 注文
         self.order(myid, side, qty, limit, stop, symbol)
 
-    def prepare(self):
+    def setup(self):
         # 取引所セットアップ
         if self.testnet.use:
             self.exchange = getattr(ccxt, self.settings.exchange)({
@@ -291,7 +287,7 @@ class Strategy:
         self.exchange.load_markets()
 
     def start(self):
-        self.prepare()
+        self.setup()
         self.yourlogic.setup(self)
 
         next_fetch_ohlcv_time = None
@@ -302,7 +298,7 @@ class Strategy:
                 self.ticker = self.fetch_ticker()
 
                 # ポジション取得
-                self.position = self.fetch_position()
+                #self.position = self.fetch_position()
 
                 # 資金情報取得
                 #self.balance = self.fetch_balance()
@@ -318,7 +314,10 @@ class Strategy:
                         next_fetch_ohlcv_time = next_fetch_ohlcv_time + timedelta(seconds=10)
 
                 # メインロジックコール
-                self.yourlogic.loop(self)
+                arg = {
+                    'strategy': self,
+                }
+                self.yourlogic.loop(**arg)
 
             except Exception as e:
                 print(e)

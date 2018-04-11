@@ -4,19 +4,11 @@ from strategy import Strategy, Trading
 
 class mylogic(Trading):
     def setup(self, strategy):
-    	print('setup')
+        pass
 
     def loop(self, strategy):
-        funding = strategy.fetch_funding()
-        timestamp = funding['timestamp']
-        print(funding.head())
-        print(datetime.utcnow())
-        delta = (timestamp[0] - timestamp[1])
-        next = timestamp[0] + delta
-        print(next)
-        print(delta)
-        rate = funding.fundingRate
-        print(rate[0])
+        print(strategy.ticker)
+
 
 
 strategy = Strategy(mylogic(), 60)
