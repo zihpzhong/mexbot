@@ -5,11 +5,11 @@ from numba import jit
 
 # PythonでFXシストレのバックテスト(1)
 # https://qiita.com/toyolab/items/e8292d2f051a88517cb2 より
-
-def Backtest(ohlc, BuyEntry, SellEntry, BuyExit, SellExit, lots=0.1, spread=2, fee=0):
+@jit
+def Backtest(ohlc, buy_entry, sell_entry, buy_exit, sell_exit, lots=0.1, spread=2, fee=0):
     Open = ohlc['open'].values #始値
-    N = len(ohlc) #FXデータのサイズ
-    BuyExit[N-2] = SellExit[N-2] = True #最後に強制エグジット
+    N = len(ohlc) #データサイズ
+    buy_exit[N-2] = sell_exit[N-2] = True #最後に強制エグジット
     BuyPrice = SellPrice = 0.0 # 売買価格
 
     LongTrade = np.zeros(N) # 買いトレード情報
@@ -18,20 +18,20 @@ def Backtest(ohlc, BuyEntry, SellEntry, BuyExit, SellExit, lots=0.1, spread=2, f
     LongPL = np.zeros(N) # 買いポジションの損益
     ShortPL = np.zeros(N) # 売りポジションの損益
 
-    for i in range(1,N):
-        if BuyEntry[i-1] and BuyPrice == 0: #買いエントリーシグナル
+    for i in range(1, N):
+        if buy_entry[i-1] and BuyPrice == 0: #買いエントリーシグナル
             BuyPrice = Open[i] + spread
             LongTrade[i] = BuyPrice #買いポジションオープン
-        elif BuyExit[i-1] and BuyPrice != 0: #買いエグジットシグナル
+        elif buy_exit[i-1] and BuyPrice != 0: #買いエグジットシグナル
             ClosePrice = Open[i]
             LongTrade[i] = -ClosePrice #買いポジションクローズ
             LongPL[i] = (ClosePrice - BuyPrice) * lots #損益確定
             BuyPrice = 0
 
-        if SellEntry[i-1] and SellPrice == 0: #売りエントリーシグナル
+        if sell_entry[i-1] and SellPrice == 0: #売りエントリーシグナル
             SellPrice = Open[i]
             ShortTrade[i] = SellPrice #売りポジションオープン
-        elif SellExit[i-1] and SellPrice != 0: #売りエグジットシグナル
+        elif sell_exit[i-1] and SellPrice != 0: #売りエグジットシグナル
             ClosePrice = Open[i] + spread
             ShortTrade[i] = -ClosePrice #売りポジションクローズ
             ShortPL[i] = (SellPrice - ClosePrice) * lots #損益確定
