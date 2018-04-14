@@ -15,13 +15,9 @@ balance = dotdict()
 ticker = dotdict()
 
 qty_lot = 100
-
-profit_trigger = 20
-loss_trigger = -15
-
-breakout_in = 11
-breakout_out = 5
-bias_length = 2
+profit_trigger = 80
+loss_trigger = -20
+breakout_in = 5
 
 def fetch_ticker(symbol=settings.symbol, timeframe=settings.timeframe):
     ticker = dotdict(exchange.fetchTicker(symbol, params={'binSize': exchange.timeframes[timeframe]}))
@@ -154,7 +150,7 @@ def edit_order(id, side, qty, limit, stop, symbol):
         type = 'limit'
         params['price'] = limit
     res = exchange.edit_order(id, symbol, type, side, qty, None, params)
-    print("{timestamp} EDIT: {orderID} {side} {orderQty} {price}".format(**res['info']))
+    print("{timestamp} EDIT: {orderID} {side} {orderQty} {price}({stopPx})".format(**res['info']))
     return dotdict(res)
 
 
@@ -259,25 +255,13 @@ if __name__ == "__main__":
             (open, high, low, close, volume) = fetch_ohlcv()
 
             # エントリー/エグジット
-            #bias = stdev(close, bias_length)
-            bias = 1
-            long_entry_price = highest(high, breakout_in) + bias
-            short_entry_price = lowest(low, breakout_in) - bias
-
-            # long_entry_price = max(highest(close, breakout_in)[0], highest(open, breakout_in)[0])
-            # short_entry_price = min(lowest(close, breakout_in)[0], lowest(open, breakout_in)[0])
-
-            # long_exit_price = min(lowest(close, breakout_out)[0], lowest(open, breakout_out)[0])
-            # short_exit_price = max(highest(close, breakout_out)[0], highest(open, breakout_out)[0])
+            long_entry_price = highest(high, breakout_in)
+            short_entry_price = lowest(low, breakout_in)
 
             # 注文
-            # entry('L', 'buy', qty=qty_lot, stop=int(long_entry_price[0]), limit=int(long_entry_price[0])-0.5)
-            # entry('S', 'sell', qty=qty_lot, stop=int(short_entry_price[0]), limit=int(short_entry_price[0])+0.5)
             if position.currentQty == 0:
-                order('L', 'buy', qty=qty_lot, limit=long_entry_price[0], stop=int(long_entry_price[0]-0.5))
-                order('S', 'sell', qty=qty_lot, limit=short_entry_price[0], stop=int(short_entry_price[0]+0.5))
-            # entry('L', 'buy', qty=qty_lot, limit=long_entry_price, stop=long_entry_price+0.5)
-            # entry('S', 'sell', qty=qty_lot, limit=short_entry_price, stop=short_entry_price-0.5)
+                order('L', 'buy', qty=qty_lot, stop=int(long_entry_price[0]+0.5))
+                order('S', 'sell', qty=qty_lot, stop=int(short_entry_price[0]-0.5))
 
             # 利確/損切り
             if position.currentQty > 0:
