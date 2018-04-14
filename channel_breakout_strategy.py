@@ -83,12 +83,11 @@ def fetch_position(symbol=settings.symbol):
     else:
         pos = dotdict()
         pos.currentQty = 0
-        pos.avgCostPrice = None
-        pos.commission = 0
-        pos.lastPrice = None
         pos.avg_price = 0
         pos.profit_and_loss = 0
         pos.profit_and_loss_pct = 0
+        pos.currentTimestamp = 0
+        pos.realisedPnl = 0
     print("{currentTimestamp} POSITION: qty {currentQty} cost {avg_price} pnl {profit_and_loss}({profit_and_loss_pct:.2f}%) {realisedPnl}".format(**pos))
     return pos
 
