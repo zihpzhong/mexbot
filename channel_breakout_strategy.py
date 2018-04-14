@@ -289,18 +289,18 @@ if __name__ == "__main__":
             sleep(settings.interval)
 
         except ccxt.DDoSProtection as e:
-            logging.exception(type(e).__name__, e.args, 'DDoS Protection (ignoring)')
+            logging.warning('DDoS Protection (ignoring)', e.args)
             sleep(5)
         except ccxt.RequestTimeout as e:
-            logging.exception(type(e).__name__, e.args, 'Request Timeout (ignoring)')
+            logging.warning('Request Timeout (ignoring)', e.args)
             sleep(5)
         except ccxt.ExchangeNotAvailable as e:
-            logging.exception(type(e).__name__, e.args, 'Exchange Not Available due to downtime or maintenance (ignoring)')
+            logging.warning('Exchange Not Available due to downtime or maintenance (ignoring)', e.args)
             sleep(60)
         except ccxt.AuthenticationError as e:
-            logging.exception(type(e).__name__, e.args, 'Authentication Error (missing API keys, ignoring)')
+            logging.warning('Authentication Error (missing API keys, ignoring)', e.args)
         except ccxt.ExchangeError as e:
-            logging.exception(type(e).__name__, e.args, 'Exchange Error(hmmm...)')
+            logging.warning('Exchange Error(hmmm...)', e.args)
             sleep(5)
         except (KeyboardInterrupt, SystemExit):
             logging.info('Shutdown...')
