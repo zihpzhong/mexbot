@@ -2,6 +2,8 @@
 from time import sleep
 from datetime import datetime, timedelta, timezone
 import sys
+import logging
+import logging.config
 import ccxt
 import pandas as pd
 from utils import dotdict
@@ -17,11 +19,11 @@ ticker = dotdict()
 qty_lot = 100
 profit_trigger = 80
 loss_trigger = -20
-breakout_in = 5
+breakout_in = 13
 
 def fetch_ticker(symbol=settings.symbol, timeframe=settings.timeframe):
     ticker = dotdict(exchange.fetchTicker(symbol, params={'binSize': exchange.timeframes[timeframe]}))
-    print("{datetime} TICK: ohlc {open} {high} {low} {close} bid {bid} ask {ask}".format(**ticker))
+    logger.info("TICK: ohlc {open} {high} {low} {close} bid {bid} ask {ask}".format(**ticker))
     return ticker
 
 
@@ -45,7 +47,7 @@ def fetch_ohlcv(symbol=settings.symbol, timeframe=settings.timeframe):
     #     'close':df['close'][0],
     #     'volume':df['volume'][0],
     # }
-    # print("OHLCV: {open} {high} {low} {close} {volume}".format(**d))
+    # logger.info("OHLCV: {open} {high} {low} {close} {volume}".format(**d))
     return (df['open'], df['high'], df['low'], df['close'], df['volume'])
 
 
@@ -86,15 +88,14 @@ def fetch_position(symbol=settings.symbol):
         pos.avg_price = 0
         pos.profit_and_loss = 0
         pos.profit_and_loss_pct = 0
-        pos.currentTimestamp = 0
         pos.realisedPnl = 0
-    print("{currentTimestamp} POSITION: qty {currentQty} cost {avg_price} pnl {profit_and_loss}({profit_and_loss_pct:.2f}%) {realisedPnl}".format(**pos))
+    logger.info("POSITION: qty {currentQty} cost {avg_price} pnl {profit_and_loss}({profit_and_loss_pct:.2f}%) {realisedPnl}".format(**pos))
     return pos
 
 
 def fetch_balance():
     balance = dotdict(exchange.fetch_balance())
-    print("BALANCE: free {free} used {used} total {total}".format(**balance.BTC))
+    logger.info("BALANCE: free {free} used {used} total {total}".format(**balance.BTC))
     return balance
 
 
@@ -103,7 +104,7 @@ def close_position(symbol=settings.symbol):
     market = exchange.market(symbol)
     req = {'symbol': market['id']}
     res = exchange.privatePostOrderClosePosition(req)
-    print("{timestamp} CLOSE: {orderID} {side} {orderQty} {price}".format(**res))
+    logger.info("CLOSE: {orderID} {side} {orderQty} {price}".format(**res))
 
 
 def cancel_order_all(symbol=settings.symbol):
@@ -112,7 +113,7 @@ def cancel_order_all(symbol=settings.symbol):
     req = {'symbol': market['id']}
     res = exchange.privateDeleteOrderAll(req)
     for r in res:
-        print("{timestamp} CANCEL: {orderID} {side} {orderQty} {price}".format(**r))
+        logger.info("CANCEL: {orderID} {side} {orderQty} {price}".format(**r))
 
 
 def create_order(side, qty, limit, stop, symbol):
@@ -131,7 +132,7 @@ def create_order(side, qty, limit, stop, symbol):
         type = 'limit'
         params['price'] = limit
     res = exchange.create_order(symbol, type, side, qty, None, params)
-    print("{timestamp} ORDER: {orderID} {side} {orderQty} {price}({stopPx})".format(**res['info']))
+    logger.info("ORDER: {orderID} {side} {orderQty} {price}({stopPx})".format(**res['info']))
     return dotdict(res)
 
 
@@ -149,7 +150,7 @@ def edit_order(id, side, qty, limit, stop, symbol):
         type = 'limit'
         params['price'] = limit
     res = exchange.edit_order(id, symbol, type, side, qty, None, params)
-    print("{timestamp} EDIT: {orderID} {side} {orderQty} {price}({stopPx})".format(**res['info']))
+    logger.info("EDIT: {orderID} {side} {orderQty} {price}({stopPx})".format(**res['info']))
     return dotdict(res)
 
 
@@ -220,7 +221,14 @@ def entry(myid, side, qty, limit=None, stop=None, symbol=settings.symbol):
 
 
 if __name__ == "__main__":
+    # ログ設定
+    logging.config.fileConfig("logging.conf")
+    logger = logging.getLogger("app")
+    logger.setLevel(logging.DEBUG)
+    logger.info("Starting")
+
     # 取引所セットアップ
+    logger.info("setup exchange..")
     if settings.use_testnet:
         exchange = getattr(ccxt, settings.exchange)({
             'apiKey': settings.testnet_apiKey,
@@ -235,6 +243,7 @@ if __name__ == "__main__":
     exchange.load_markets()
 
     # 現在のポジションをすべて閉じる
+    logger.info("close position")
     close_position()
 
     # 最後にOHLCを取得した時間
@@ -280,23 +289,24 @@ if __name__ == "__main__":
             sleep(settings.interval)
 
         except ccxt.DDoSProtection as e:
-            print(type(e).__name__, e.args, 'DDoS Protection (ignoring)')
+            logging.exception(type(e).__name__, e.args, 'DDoS Protection (ignoring)')
             sleep(5)
         except ccxt.RequestTimeout as e:
-            print(type(e).__name__, e.args, 'Request Timeout (ignoring)')
+            logging.exception(type(e).__name__, e.args, 'Request Timeout (ignoring)')
             sleep(5)
         except ccxt.ExchangeNotAvailable as e:
-            print(type(e).__name__, e.args, 'Exchange Not Available due to downtime or maintenance (ignoring)')
+            logging.exception(type(e).__name__, e.args, 'Exchange Not Available due to downtime or maintenance (ignoring)')
             sleep(60)
         except ccxt.AuthenticationError as e:
-            print(type(e).__name__, e.args, 'Authentication Error (missing API keys, ignoring)')
+            logging.exception(type(e).__name__, e.args, 'Authentication Error (missing API keys, ignoring)')
         except ccxt.ExchangeError as e:
-            print(type(e).__name__, e.args, 'Exchange Error(hmmm...)')
+            logging.exception(type(e).__name__, e.args, 'Exchange Error(hmmm...)')
             sleep(5)
         except (KeyboardInterrupt, SystemExit):
+            logging.info('Shutdown...')
             cancel_order_all()
             close_position()
             sys.exit()
         except Exception as e:
-            print(e)
+            logging.exception(e)
             sleep(5)
