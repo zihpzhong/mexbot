@@ -111,9 +111,12 @@ def close_position(symbol=settings.symbol):
 def cancel(myid):
     """注文をキャンセル"""
     if myid in orders:
-        order_id = orders[myid].id
-        res = exchange.cancel_order(order_id)
-        logger.info("CANCEL: {orderID} {side} {orderQty} {price}".format(**res['info']))
+        try:
+            order_id = orders[myid].id
+            res = exchange.cancel_order(order_id)
+            logger.info("CANCEL: {orderID} {side} {orderQty} {price}".format(**res['info']))
+        except ccxt.OrderNotFound as e:
+            logging.exception(e)
         del orders[myid]
 
 
@@ -126,7 +129,7 @@ def cancel_order_all(symbol=settings.symbol):
         logger.info("CANCEL: {orderID} {side} {orderQty} {price}".format(**r))
 
 
-def create_order(side, qty, limit, stop, symbol):
+def create_order(side, qty, limit, stop, trailing_offset, symbol):
     type = 'market'
     params = {}
     if stop is not None and limit is not None:
@@ -141,12 +144,15 @@ def create_order(side, qty, limit, stop, symbol):
     elif limit is not None:
         type = 'limit'
         params['price'] = limit
+    if trailing_offset is not None:
+        params['pegPriceType'] = 'TrailingStopPeg'
+        params['pegOffsetValue'] = trailing_offset
     res = exchange.create_order(symbol, type, side, qty, None, params)
     logger.info("ORDER: {orderID} {side} {orderQty} {price}({stopPx})".format(**res['info']))
     return dotdict(res)
 
 
-def edit_order(id, side, qty, limit, stop, symbol):
+def edit_order(id, side, qty, limit, stop, trailing_offset, symbol):
     type = 'market'
     params = {}
     if stop is not None and limit is not None:
@@ -159,12 +165,14 @@ def edit_order(id, side, qty, limit, stop, symbol):
     elif limit is not None:
         type = 'limit'
         params['price'] = limit
+    if trailing_offset is not None:
+        params['pegOffsetValue'] = trailing_offset
     res = exchange.edit_order(id, symbol, type, side, qty, None, params)
     logger.info("EDIT: {orderID} {side} {orderQty} {price}({stopPx})".format(**res['info']))
     return dotdict(res)
 
 
-def order(myid, side, qty, limit=None, stop=None, symbol=settings.symbol):
+def order(myid, side, qty, limit=None, stop=None, trailing_offset=None, symbol=settings.symbol):
     """注文"""
 
     qty_total = qty
@@ -206,17 +214,17 @@ def order(myid, side, qty, limit=None, stop=None, symbol=settings.symbol):
             if order.status == 'open':
                 if order.type == 'stoplimit' and order.info['triggered'] == 'StopOrderTriggered':
                     order = exchange.cancel_order(order_id)
-                    order = create_order(side, qty, limit, stop, symbol)
+                    order = create_order(side, qty, limit, stop, trailing_offset, symbol)
                 else:
-                    order = edit_order(order_id, side, qty, limit, stop, symbol)
+                    order = edit_order(order_id, side, qty, limit, stop, trailing_offset, symbol)
             else:
-                order = create_order(side, qty, limit, stop, symbol)
+                order = create_order(side, qty, limit, stop, trailing_offset, symbol)
         else:
-            order = create_order(side, qty, limit, stop, symbol)
+            order = create_order(side, qty, limit, stop, trailing_offset, symbol)
         orders[myid] = order
 
 
-def entry(myid, side, qty, limit=None, stop=None, symbol=settings.symbol):
+def entry(myid, side, qty, limit=None, stop=None, trailing_offset=None, symbol=settings.symbol):
     """注文"""
     # 買いポジションがある場合、清算する
     if side=='sell' and position.currentQty > 0:
@@ -227,7 +235,7 @@ def entry(myid, side, qty, limit=None, stop=None, symbol=settings.symbol):
         qty = qty - position.currentQty
 
     # 注文
-    order(myid, side, qty, limit, stop, symbol)
+    order(myid, side, qty, limit, stop, trailing_offset, symbol)
 
 
 if __name__ == "__main__":
