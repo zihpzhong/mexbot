@@ -16,11 +16,11 @@ position = dotdict()
 balance = dotdict()
 ticker = dotdict()
 
-qty_lot = 10
+qty_lot = 100
 profit_trigger = 80
 loss_trigger = -20
 trailing_offset = 20
-breakout_in = 25
+breakout_in = 24
 
 def fetch_ticker(symbol=settings.symbol, timeframe=settings.timeframe):
     ticker = dotdict(exchange.fetchTicker(symbol, params={'binSize': exchange.timeframes[timeframe]}))
@@ -269,6 +269,9 @@ if __name__ == "__main__":
     trailing_stop = 0
 
     while True:
+        # 待機時間設定
+        interval = settings.interval
+
         try:
             # ティッカー取得
             ticker = fetch_ticker()
@@ -290,8 +293,8 @@ if __name__ == "__main__":
             # if position.currentQty == 0:
             #     order('L', 'buy', qty=qty_lot, limit=int(long_entry_price[0]+0.5), stop=int(long_entry_price[0]+0.5))
             #     order('S', 'sell', qty=qty_lot, limit=int(short_entry_price[0]-0.5), stop=int(short_entry_price[0]-0.5))
-            entry('L', 'buy', qty=qty_lot, limit=int(long_entry_price[0]+0.5), stop=int(long_entry_price[0]+0.5))
-            entry('S', 'sell', qty=qty_lot, limit=int(short_entry_price[0]-0.5), stop=int(short_entry_price[0]-0.5))
+            entry('L', 'buy', qty=qty_lot, stop=long_entry_price[0]+0.5)
+            entry('S', 'sell', qty=qty_lot, stop=short_entry_price[0]-0.5)
 
             # 利確/損切り
             if position.currentQty > 0:
@@ -317,23 +320,21 @@ if __name__ == "__main__":
                 cancel('L_exit')
                 cancel('S_exit')
 
-            # 待機
-            sleep(settings.interval)
-
         except ccxt.DDoSProtection as e:
-            logging.exception('DDoS Protection (ignoring)')
-            sleep(5)
+            logging.warning(type(e).__name__ + ": {0}".format(e))
+            interval = 20
         except ccxt.RequestTimeout as e:
-            logging.exception('Request Timeout (ignoring)')
-            sleep(5)
+            logging.warning(type(e).__name__ + ": {0}".format(e))
+            interval = 20
         except ccxt.ExchangeNotAvailable as e:
-            logging.exception('Exchange Not Available due to downtime or maintenance (ignoring)')
-            sleep(60)
+            logging.warning(type(e).__name__ + ": {0}".format(e))
+            interval = 60
         except ccxt.AuthenticationError as e:
-            logging.exception('Authentication Error (missing API keys, ignoring)')
+            logging.warning(type(e).__name__ + ": {0}".format(e))
+            interval = 60
         except ccxt.ExchangeError as e:
-            logging.exception('Exchange Error (hmmm...)')
-            sleep(5)
+            logging.warning(type(e).__name__ + ": {0}".format(e))
+            interval = 10
         except (KeyboardInterrupt, SystemExit):
             logging.info('Shutdown...')
             cancel_order_all()
@@ -341,4 +342,6 @@ if __name__ == "__main__":
             sys.exit()
         except Exception as e:
             logging.exception(e)
-            sleep(5)
+            interval = 10
+        # 待機
+        sleep(interval)
