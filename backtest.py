@@ -32,12 +32,13 @@ def Backtest(ohlc, buy_entry, sell_entry, buy_exit, sell_exit, lots=0.1, spread=
     # シグナルが出た次の足の始値で成行売買を行う
     #
     for i in range(1, N):
+        BuyNow = SellNow = False
         # エントリー／イグジット
         if buy_entry[i-1] and BuyPrice == 0: #買いエントリーシグナル
             BuyPrice = Open[i] + spread
             LongTrade[i] = BuyPrice #買いポジションオープン
-
-        if buy_exit[i-1] and BuyPrice != 0: #買いエグジットシグナル
+            BuyNow = True
+        elif buy_exit[i-1] and BuyPrice != 0: #買いエグジットシグナル
             ClosePrice = Open[i]
             LongTrade[i] = -ClosePrice #買いポジションクローズ
             LongPL[i] = (ClosePrice - BuyPrice) * lots #損益確定
@@ -46,47 +47,53 @@ def Backtest(ohlc, buy_entry, sell_entry, buy_exit, sell_exit, lots=0.1, spread=
         if sell_entry[i-1] and SellPrice == 0: #売りエントリーシグナル
             SellPrice = Open[i]
             ShortTrade[i] = SellPrice #売りポジションオープン
-
-        if sell_exit[i-1] and SellPrice != 0: #売りエグジットシグナル
+            SellNow = True
+        elif sell_exit[i-1] and SellPrice != 0: #売りエグジットシグナル
             ClosePrice = Open[i] + spread
             ShortTrade[i] = -ClosePrice #売りポジションクローズ
             ShortPL[i] = (SellPrice - ClosePrice) * lots #損益確定
             SellPrice = 0
 
         # 利確 or 損切によるポジションの決済
-        if BuyPrice != 0:
+        if BuyPrice != 0 and not BuyNow:
             ClosePrice = 0
             if stop_loss > 0:
                 # 損切判定 Open -> Low
                 StopPrice = BuyPrice - stop_loss
-                if Open[i] <= StopPrice:
-                    ClosePrice = Open[i]
-                elif Low[i] <= StopPrice:
-                    ClosePrice = Low[i]
+                # if Open[i] <= StopPrice:
+                #     ClosePrice = Open[i]
+                # elif Low[i] <= StopPrice:
+                #     ClosePrice = Low[i]
+                if Low[i] <= StopPrice:
+                    ClosePrice = Close[i]
             elif take_profit > 0:
                 # 利確判定
                 LimitPrice = BuyPrice + take_profit
                 if High[i] >= LimitPrice:
-                    ClosePrice = LimitPrice
+                    #ClosePrice = LimitPrice
+                    ClosePrice = Close[i]
             if ClosePrice > 0:
                 LongTrade[i] = -ClosePrice #買いポジションクローズ
                 LongPL[i] = (ClosePrice - BuyPrice) * lots #損益確定
                 BuyPrice = 0
 
-        if SellPrice != 0:
+        if SellPrice != 0 and not SellNow:
             ClosePrice = 0
             if stop_loss > 0:
                 # 損切判定 Open -> High
                 StopPrice = SellPrice + stop_loss
-                if Open[i] >= StopPrice:
-                    ClosePrice = Open[i]
-                elif High[i] >= StopPrice:
-                    ClosePrice = High[i]
+                # if Open[i] >= StopPrice:
+                #     ClosePrice = Open[i]
+                # elif High[i] >= StopPrice:
+                #     ClosePrice = High[i]
+                if High[i] >= StopPrice:
+                    ClosePrice = Close[i]
             elif take_profit > 0:
                 # 利確判定
                 LimitPrice = SellPrice - take_profit
                 if Low[i] <= LimitPrice:
-                    ClosePrice = LimitPrice
+                    #ClosePrice = LimitPrice
+                    ClosePrice = Close[i]
             if ClosePrice > 0:
                 ShortTrade[i] = -ClosePrice #売りポジションクローズ
                 ShortPL[i] = (SellPrice - ClosePrice) * lots #損益確定
@@ -100,6 +107,10 @@ def Backtest(ohlc, buy_entry, sell_entry, buy_exit, sell_exit, lots=0.1, spread=
 
 class BacktestReport:
     def __init__(self, Trades, PL):
+        self.Raw = dotdict()
+        self.Raw.Trades = Trades
+        self.Raw.PL = PL
+
         self.Long = dotdict()
         self.Short = dotdict()
 
