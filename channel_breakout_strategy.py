@@ -16,10 +16,11 @@ position = dotdict()
 balance = dotdict()
 ticker = dotdict()
 
-qty_lot = 100
+qty_lot = 10
 profit_trigger = 80
 loss_trigger = -20
-breakout_in = 13
+trailing_offset = 20
+breakout_in = 25
 
 def fetch_ticker(symbol=settings.symbol, timeframe=settings.timeframe):
     ticker = dotdict(exchange.fetchTicker(symbol, params={'binSize': exchange.timeframes[timeframe]}))
@@ -105,6 +106,15 @@ def close_position(symbol=settings.symbol):
     req = {'symbol': market['id']}
     res = exchange.privatePostOrderClosePosition(req)
     logger.info("CLOSE: {orderID} {side} {orderQty} {price}".format(**res))
+
+
+def cancel(myid):
+    """注文をキャンセル"""
+    if myid in orders:
+        order_id = orders[myid].id
+        res = exchange.cancel_order(order_id)
+        logger.info("CANCEL: {orderID} {side} {orderQty} {price}".format(**res['info']))
+        del orders[myid]
 
 
 def cancel_order_all(symbol=settings.symbol):
@@ -228,7 +238,7 @@ if __name__ == "__main__":
     logger.info("Starting")
 
     # 取引所セットアップ
-    logger.info("setup exchange..")
+    logger.info("Setup Exchange")
     if settings.use_testnet:
         exchange = getattr(ccxt, settings.exchange)({
             'apiKey': settings.testnet_apiKey,
@@ -243,10 +253,12 @@ if __name__ == "__main__":
     exchange.load_markets()
 
     # 現在のポジションをすべて閉じる
-    logger.info("close position")
+    logger.info("Cancel all orders and close position")
+    cancel_order_all()
     close_position()
 
-    # 最後にOHLCを取得した時間
+    # トレールストップ価格
+    trailing_stop = 0
 
     while True:
         try:
@@ -267,40 +279,52 @@ if __name__ == "__main__":
             short_entry_price = lowest(low, breakout_in)
 
             # 注文
-            if position.currentQty == 0:
-                order('L', 'buy', qty=qty_lot, stop=int(long_entry_price[0]+0.5))
-                order('S', 'sell', qty=qty_lot, stop=int(short_entry_price[0]-0.5))
+            # if position.currentQty == 0:
+            #     order('L', 'buy', qty=qty_lot, limit=int(long_entry_price[0]+0.5), stop=int(long_entry_price[0]+0.5))
+            #     order('S', 'sell', qty=qty_lot, limit=int(short_entry_price[0]-0.5), stop=int(short_entry_price[0]-0.5))
+            entry('L', 'buy', qty=qty_lot, limit=int(long_entry_price[0]+0.5), stop=int(long_entry_price[0]+0.5))
+            entry('S', 'sell', qty=qty_lot, limit=int(short_entry_price[0]-0.5), stop=int(short_entry_price[0]-0.5))
 
             # 利確/損切り
             if position.currentQty > 0:
-                pnl = ticker.ask - position.avg_price
-                if pnl >= profit_trigger:
-                    order('L_exit', side='sell', qty=position.currentQty, limit=ticker.ask)
-                elif pnl <= loss_trigger:
-                    order('L_exit', side='sell', qty=position.currentQty)
+                if ticker.ask > trailing_stop or trailing_stop == 0:
+                    trailing_stop = ticker.ask
+                order('L_exit', side='sell', qty=position.currentQty, stop=trailing_stop - trailing_offset)
+                # pnl = ticker.ask - position.avg_price
+                # if pnl >= profit_trigger:
+                #     order('L_exit', side='sell', qty=position.currentQty, limit=ticker.ask)
+                # elif pnl <= loss_trigger:
+                #     order('L_exit', side='sell', qty=position.currentQty)
             elif position.currentQty < 0:
-                pnl = position.avg_price - ticker.bid
-                if pnl >= profit_trigger:
-                    order('S_exit', side='buy', qty=-position.currentQty, limit=ticker.bid)
-                elif pnl <= loss_trigger:
-                    order('S_exit', side='buy', qty=-position.currentQty)
+                if ticker.bid < trailing_stop or trailing_stop == 0:
+                    trailing_stop = ticker.bid
+                order('S_exit', side='buy', qty=-position.currentQty, stop=trailing_stop + trailing_offset)
+                # pnl = position.avg_price - ticker.bid
+                # if pnl >= profit_trigger:
+                #     order('S_exit', side='buy', qty=-position.currentQty, limit=ticker.bid)
+                # elif pnl <= loss_trigger:
+                #     order('S_exit', side='buy', qty=-position.currentQty)
+            else:
+                trailing_stop = 0
+                cancel('L_exit')
+                cancel('S_exit')
 
             # 待機
             sleep(settings.interval)
 
         except ccxt.DDoSProtection as e:
-            logging.warning('DDoS Protection (ignoring)')
+            logging.exception('DDoS Protection (ignoring)')
             sleep(5)
         except ccxt.RequestTimeout as e:
-            logging.warning('Request Timeout (ignoring)')
+            logging.exception('Request Timeout (ignoring)')
             sleep(5)
         except ccxt.ExchangeNotAvailable as e:
-            logging.warning('Exchange Not Available due to downtime or maintenance (ignoring)')
+            logging.exception('Exchange Not Available due to downtime or maintenance (ignoring)')
             sleep(60)
         except ccxt.AuthenticationError as e:
-            logging.warning('Authentication Error (missing API keys, ignoring)')
+            logging.exception('Authentication Error (missing API keys, ignoring)')
         except ccxt.ExchangeError as e:
-            logging.warning('Exchange Error(hmmm...)')
+            logging.exception('Exchange Error (hmmm...)')
             sleep(5)
         except (KeyboardInterrupt, SystemExit):
             logging.info('Shutdown...')
