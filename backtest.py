@@ -7,20 +7,18 @@ from utils import dotdict
 # PythonでFXシストレのバックテスト(1)
 # https://qiita.com/toyolab/items/e8292d2f051a88517cb2 より
 @jit
-def Backtest(ohlc, buy_entry, sell_entry, buy_exit, sell_exit, lots=0.1, spread=0, take_profit=0, stop_loss=0):
+def Backtest(ohlc,
+    buy_entry=None, sell_entry=None, buy_exit=None, sell_exit=None,
+    stop_buy_entry=None, stop_sell_entry=None, stop_buy_exit=None, stop_sell_exit=None,
+    lots=0.1, spread=0, take_profit=0, stop_loss=0, slippage=0):
     Open = ohlc.open.values #始値
     Low = ohlc.low.values #安値
     High = ohlc.high.values #高値
     Close = ohlc.close.values #始値
 
-    buy_entry = buy_entry.values
-    sell_entry = sell_entry.values
-    buy_exit = buy_exit.values
-    sell_exit = sell_exit.values
-
     N = len(ohlc) #データサイズ
-    buy_exit[N-2] = sell_exit[N-2] = True #最後に強制エグジット
-    BuyPrice = SellPrice = 0.0 # 売買価格
+    buyExecPrice = sellExecPrice = 0.0 # 売買価格
+    buyStopEntry = buyStopExit = sellStopEntry = sellStopExit = 0
 
     LongTrade = np.zeros(N) # 買いトレード情報
     ShortTrade = np.zeros(N) # 売りトレード情報
@@ -28,77 +26,141 @@ def Backtest(ohlc, buy_entry, sell_entry, buy_exit, sell_exit, lots=0.1, spread=
     LongPL = np.zeros(N) # 買いポジションの損益
     ShortPL = np.zeros(N) # 売りポジションの損益
 
+    place_holder = np.zeros(N) # 売りポジションの損益
+
+    buy_entry = place_holder if buy_entry is None else buy_entry.values
+    sell_entry = place_holder if sell_entry is None else sell_entry.values
+    buy_exit = place_holder if buy_exit is None else buy_exit.values
+    sell_exit = place_holder if sell_exit is None else sell_exit.values
+
+    stop_buy_entry = place_holder if stop_buy_entry is None else stop_buy_entry.values
+    stop_sell_entry = place_holder if stop_sell_entry is None else stop_sell_entry.values
+    stop_buy_exit = place_holder if stop_buy_exit is None else stop_buy_exit.values
+    stop_sell_exit = place_holder if stop_sell_exit is None else stop_sell_exit.values
+
     #
-    # シグナルが出た次の足の始値で成行売買を行う
+    # 1.シグナルが出た次の足の始値で成行
+    # 2.1.ストップ注文がでたら次の足でトリガー値で注文
+    # 2.2.買い注文の場合、High > トリガーで約定
+    #     売り注文の場合、Low < トリガーで約定
     #
     for i in range(1, N):
         BuyNow = SellNow = False
-        # エントリー／イグジット
-        if buy_entry[i-1] and BuyPrice == 0: #買いエントリーシグナル
-            BuyPrice = Open[i] + spread
-            LongTrade[i] = BuyPrice #買いポジションオープン
-            BuyNow = True
-        elif buy_exit[i-1] and BuyPrice != 0: #買いエグジットシグナル
-            ClosePrice = Open[i]
-            LongTrade[i] = -ClosePrice #買いポジションクローズ
-            LongPL[i] = (ClosePrice - BuyPrice) * lots #損益確定
-            BuyPrice = 0
 
-        if sell_entry[i-1] and SellPrice == 0: #売りエントリーシグナル
-            SellPrice = Open[i]
-            ShortTrade[i] = SellPrice #売りポジションオープン
-            SellNow = True
-        elif sell_exit[i-1] and SellPrice != 0: #売りエグジットシグナル
-            ClosePrice = Open[i] + spread
-            ShortTrade[i] = -ClosePrice #売りポジションクローズ
-            ShortPL[i] = (SellPrice - ClosePrice) * lots #損益確定
-            SellPrice = 0
+        # 買い注文処理
+        if buyExecPrice == 0:
+            OpenPrice = 0
+            # 成り行き注文
+            if buy_entry[i-1]:
+                OpenPrice = Open[i]
+            # STOP注文
+            if stop_buy_entry[i-1] > 0:
+                buyStopEntry = stop_buy_entry[i-1]
+            if buyStopEntry > 0 and High[i] >= buyStopEntry:
+                OpenPrice = buyStopEntry
+                buyStopEntry = 0
+            # 注文執行
+            if OpenPrice > 0:
+                buyExecPrice = OpenPrice + spread + slippage
+                LongTrade[i] = buyExecPrice #買いポジションオープン
+                BuyNow = True
+        else:
+            ClosePrice = 0
+            # 成り行き注文
+            if buy_exit[i-1] > 0:
+                ClosePrice = Open[i]
+            # STOP注文
+            if stop_buy_exit[i-1] > 0:
+                buyStopExit = stop_buy_exit[i-1]
+            if buyStopExit > 0 and Low[i] <= buyStopExit:
+                ClosePrice = buyStopExit
+                buyStopExit = 0
+            # 注文執行
+            if ClosePrice > 0:
+                ClosePrice = ClosePrice - slippage
+                LongTrade[i] = -ClosePrice #買いポジションクローズ
+                LongPL[i] = (ClosePrice - buyExecPrice) * lots #損益確定
+                buyExecPrice = 0
 
-        # 利確 or 損切によるポジションの決済
-        if BuyPrice != 0 and not BuyNow:
+        # 売り注文処理
+        if sellExecPrice == 0:
+            OpenPrice = 0
+            # 成り行き注文
+            if sell_entry[i-1] > 0:
+                OpenPrice = Open[i]
+            # STOP注文
+            if stop_sell_entry[i-1] > 0:
+                sellStopEntry = stop_sell_entry[i-1]
+            if sellStopEntry > 0 and Low[i] <= sellStopEntry:
+                OpenPrice = sellStopEntry
+                sellStopEntry = 0
+            # 注文執行
+            if OpenPrice:
+                sellExecPrice = OpenPrice - slippage
+                ShortTrade[i] = sellExecPrice #売りポジションオープン
+                SellNow = True
+        else:
+            ClosePrice = 0
+            # 成り行き注文
+            if sell_exit[i-1] > 0:
+                ClosePrice = Open[i]
+            # STOP注文
+            if stop_sell_exit[i-1] > 0:
+                sellStopExit = stop_sell_exit[i-1]
+            if sellStopExit > 0 and High[i] > sellStopExit:
+                ClosePrice = sellStopExit
+                sellStopExit = 0
+            # 注文執行
+            if ClosePrice > 0:
+                ClosePrice = ClosePrice + spread + slippage
+                ShortTrade[i] = -ClosePrice #売りポジションクローズ
+                ShortPL[i] = (sellExecPrice - ClosePrice) * lots #損益確定
+                sellExecPrice = 0
+
+        # 利確 or 損切によるポジションの決済(エントリーと同じ足で決済しない)
+        if buyExecPrice != 0 and not BuyNow:
             ClosePrice = 0
             if stop_loss > 0:
                 # 損切判定 Open -> Low
-                StopPrice = BuyPrice - stop_loss
-                # if Open[i] <= StopPrice:
-                #     ClosePrice = Open[i]
-                # elif Low[i] <= StopPrice:
-                #     ClosePrice = Low[i]
+                StopPrice = buyExecPrice - stop_loss
                 if Low[i] <= StopPrice:
-                    ClosePrice = Close[i]
+                    ClosePrice = StopPrice - slippage
             elif take_profit > 0:
                 # 利確判定
-                LimitPrice = BuyPrice + take_profit
+                LimitPrice = buyExecPrice + take_profit
                 if High[i] >= LimitPrice:
-                    #ClosePrice = LimitPrice
-                    ClosePrice = Close[i]
+                    ClosePrice = LimitPrice - slippage
             if ClosePrice > 0:
                 LongTrade[i] = -ClosePrice #買いポジションクローズ
-                LongPL[i] = (ClosePrice - BuyPrice) * lots #損益確定
-                BuyPrice = 0
+                LongPL[i] = (ClosePrice - buyExecPrice) * lots #損益確定
+                buyExecPrice = 0
 
-        if SellPrice != 0 and not SellNow:
+        if sellExecPrice != 0 and not SellNow:
             ClosePrice = 0
             if stop_loss > 0:
                 # 損切判定 Open -> High
-                StopPrice = SellPrice + stop_loss
-                # if Open[i] >= StopPrice:
-                #     ClosePrice = Open[i]
-                # elif High[i] >= StopPrice:
-                #     ClosePrice = High[i]
+                StopPrice = sellExecPrice + stop_loss
                 if High[i] >= StopPrice:
-                    ClosePrice = Close[i]
+                    ClosePrice = StopPrice + slippage
             elif take_profit > 0:
                 # 利確判定
-                LimitPrice = SellPrice - take_profit
+                LimitPrice = sellExecPrice - take_profit
                 if Low[i] <= LimitPrice:
-                    #ClosePrice = LimitPrice
-                    ClosePrice = Close[i]
+                    ClosePrice = LimitPrice + slippage
             if ClosePrice > 0:
                 ShortTrade[i] = -ClosePrice #売りポジションクローズ
-                ShortPL[i] = (SellPrice - ClosePrice) * lots #損益確定
-                SellPrice = 0
+                ShortPL[i] = (sellExecPrice - ClosePrice) * lots #損益確定
+                sellExecPrice = 0
 
+    # ポジションクローズ
+    if buyExecPrice > 0:
+        ClosePrice = Close[N-1]
+        LongTrade[N-1] = -ClosePrice #買いポジションクローズ
+        LongPL[N-1] = (ClosePrice - buyExecPrice) * lots #損益確定
+    if sellExecPrice > 0:
+        ClosePrice = Close[N-1]
+        ShortTrade[N-1] = -ClosePrice #売りポジションクローズ
+        ShortPL[N-1] = (sellExecPrice - ClosePrice) * lots #損益確定
 
     return BacktestReport(
         Trades=pd.DataFrame({'Long':LongTrade, 'Short':ShortTrade}, index=ohlc.index),

@@ -12,7 +12,7 @@ def lowest(series, window):
     return series.rolling(window).min()
 
 # テストデータ読み込み
-data = pd.read_csv('bitmex_20180414_5m.csv', index_col='timestamp', parse_dates=True)
+data = pd.read_csv('bitmex_20180414-16_5m.csv', index_col='timestamp', parse_dates=True)
 #print(data.head())
 
 @jit
@@ -25,26 +25,32 @@ def channel_breakout_backtest(ohlc, breakout_in, breakout_out, take_profit=0, st
     short_exit_price = highest(ohlc.high, breakout_out)
 
     # エントリー／イグジット
-    long_entry = ohlc.close > long_entry_price.shift(1)
-    long_exit = ohlc.close < long_exit_price.shift(1)
+    long_entry = None#ohlc.close > long_entry_price.shift(1)
+    long_exit = None#ohlc.close < long_exit_price.shift(1)
 
-    short_entry = ohlc.close < short_entry_price.shift(1)
-    short_exit = ohlc.close > short_exit_price.shift(1)
+    short_entry = None#ohlc.close < short_entry_price.shift(1)
+    short_exit = None#ohlc.close > short_exit_price.shift(1)
 
-    long_entry[:breakout_in] = False
-    long_exit[:breakout_out] = False
-    short_entry[:breakout_in] = False
-    short_exit[:breakout_out] = False
+    # long_entry[:breakout_in] = False
+    # long_exit[:breakout_out] = False
+    # short_entry[:breakout_in] = False
+    # short_exit[:breakout_out] = False
 
     # バックテスト実施
     entry_exit = pd.DataFrame({'close':ohlc.close, 'open':ohlc.open,
         'long_entry_price':long_entry_price, 'long_exit_price':long_exit_price, 'long_entry':long_entry, 'long_exit':long_exit,
-        'short_entry_price':short_entry_price, 'short_entry':short_entry, 'short_exit_price':short_exit_price, 'short_exit':short_exit}, index=data.index)
-    entry_exit.to_csv('channel_breakout_backtest_entry_exit.csv')
+        'short_entry_price':short_entry_price, 'short_entry':short_entry, 'short_exit_price':short_exit_price, 'short_exit':short_exit})#, index=data.index)
+    entry_exit.to_csv('entry_exit.csv')
 
-    return Backtest(data, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit, lots=1, spread=0, take_profit=take_profit, stop_loss=stop_loss)
+    return Backtest(data, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit,
+        stop_buy_entry=long_entry_price, stop_sell_entry=short_entry_price, stop_buy_exit=long_exit_price, stop_sell_exit=short_exit_price,
+        lots=1, spread=0, take_profit=take_profit, stop_loss=stop_loss, slippage=10)
 
-# report = channel_breakout_backtest(data, 18, 5, take_profit=0, stop_loss=20)
+# report = channel_breakout_backtest(data, 5, 40, take_profit=0, stop_loss=0)
+# report.Raw.Trades.to_csv('trades.csv')
+# report.Raw.PL.to_csv('pl.csv')
+# report.Equity.to_csv('equity.csv')
+
 # long = report.Raw.Trades['Long']
 # long = long[long != 0]
 # print(long)
@@ -68,7 +74,7 @@ def channel_breakout_backtest(ohlc, breakout_in, breakout_out, take_profit=0, st
 # https://qiita.com/kenchin110100/items/ac3edb480d789481f134
 
 breakout_in = 18
-breakout_out = 5
+breakout_out = 18
 take_profit = 0
 stop_loss = 0
 
@@ -89,9 +95,9 @@ def objective(args):
 
 # 探索するパラメータ
 hyperopt_parameters = {
-    'breakout_in': hp.quniform('breakout_in', 2, 100, 2),
-    'breakout_out': hp.quniform('breakout_out', 2, 100, 2),
-    # 'take_profit': hp.quniform('take_profit', 0, 120, 5),
+    'breakout_in': hp.quniform('breakout_in', 1, 50, 1),
+    'breakout_out': hp.quniform('breakout_out', 1, 50, 1),
+    # 'take_profit': hp.quniform('take_profit', 0, 100, 5),
     # 'stop_loss': hp.quniform('stop_loss', 0, 40, 2),
 }
 
@@ -122,4 +128,8 @@ print('best:', best)
 
 report = channel_breakout_backtest(data, int(best['breakout_in']), int(best['breakout_out']), take_profit, stop_loss)
 # report = channel_breakout_backtest(data, breakout_in, breakout_out, int(best['take_profit']), int(best['stop_loss']))
+# report = channel_breakout_backtest(data, int(best['breakout_in']), int(best['breakout_out']), int(best['take_profit']), int(best['stop_loss']))
 print(report)
+report.Raw.Trades.to_csv('trades.csv')
+report.Raw.PL.to_csv('pl.csv')
+report.Equity.to_csv('equity.csv')
