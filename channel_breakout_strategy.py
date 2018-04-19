@@ -16,6 +16,7 @@ position = dotdict()
 balance = dotdict()
 ticker = dotdict()
 
+fixed_usd_unit = 2000
 qty_lot = 200
 profit_trigger = 80
 loss_trigger = -20
@@ -96,6 +97,7 @@ def fetch_position(symbol=settings.symbol):
 
 def fetch_balance():
     balance = dotdict(exchange.fetch_balance())
+    balance.BTC = dotdict(balance.BTC)
     logger.info("BALANCE: free {free} used {used} total {total}".format(**balance.BTC))
     return balance
 
@@ -238,6 +240,12 @@ def entry(myid, side, qty, limit=None, stop=None, trailing_offset=None, symbol=s
     order(myid, side, qty, limit, stop, trailing_offset, symbol)
 
 
+def calcbestlots():
+    # 残高に固定ユニット数（USドル単位）をかけた値をロット数とする
+    lots = int((balance.BTC.free * fixed_usd_unit))
+    logger.info("LOTS: " + str(lots))
+    return lots
+
 if __name__ == "__main__":
     # ログ設定
     logging.config.fileConfig("logging.conf")
@@ -283,7 +291,7 @@ if __name__ == "__main__":
             position = fetch_position()
 
             # 資金情報取得
-            #balance = fetch_balance()
+            balance = fetch_balance()
 
             # 足取得
             (open, high, low, close, volume) = fetch_ohlcv()
@@ -291,6 +299,9 @@ if __name__ == "__main__":
             # エントリー/エグジット
             long_entry_price = highest(high, breakout_in)
             short_entry_price = lowest(low, breakout_in)
+
+            # ロット数計算
+            qty_lot = calcbestlots()
 
             # 注文
             # if position.currentQty == 0:
