@@ -4,27 +4,27 @@ import pandas as pd
 # index 0 が最新値、1が1つ前、-1 が最古値であることに注意
 
 def sma(source, period):
-    return source.sort_index(ascending=True).rolling(period).mean()
+    return source[-1::-1].rolling(period).mean()
 
 def ema(source, period):
     alpha = 2.0 / (period + 1)
-    return source.sort_index(ascending=True).ewm(alpha=alpha).mean()
+    return source[-1::-1].ewm(alpha=alpha).mean()
 
 def rma(source, period):
     alpha = 1.0 / (period)
-    return source.sort_index(ascending=True).ewm(alpha=alpha).mean()
+    return source[-1::-1].ewm(alpha=alpha).mean()
 
 def highest(source, period):
-    return source.sort_index(ascending=True).rolling(period).max()
+    return source[-1::-1].rolling(period).max()
 
 def lowest(source, period):
-    return source.sort_index(ascending=True).rolling(period).min()
+    return source[-1::-1].rolling(period).min()
 
 def stdev(source, period):
-    return source.sort_index(ascending=True).rolling(period).std()
+    return source[-1::-1].rolling(period).std()
 
 def rsi(source, period):
-    diff = source.sort_index(ascending=True).diff()
+    diff = source[-1::-1].diff()
     alpha = 1.0 / (period)
     positive = diff.clip_lower(0).ewm(alpha=alpha).mean()
     negative = diff.clip_upper(0).ewm(alpha=alpha).mean()
@@ -32,16 +32,16 @@ def rsi(source, period):
     return rsi
 
 def stoch(close, high, low, period):
-    hline = high.sort_index(ascending=True).rolling(period).max()
-    lline = low.sort_index(ascending=True).rolling(period).min()
-    close = close.sort_index(ascending=True)
+    hline = high[-1::-1].rolling(period).max()
+    lline = low[-1::-1].rolling(period).min()
+    close = close[-1::-1]
     return 100 * (close - lline) / (hline - lline)
 
 def momentum(source, period):
-    return source.sort_index(ascending=True).diff(period)
+    return source[-1::-1].diff(period)
 
 def bbands(source, period, mult=2):
-    source = source.sort_index(ascending=True)
+    source = source[-1::-1]
     middle = source.rolling(period).mean()
     sigma = source.rolling(period).std()
     upper = middle+sigma*mult
@@ -49,13 +49,13 @@ def bbands(source, period, mult=2):
     return (upper, lower, middle, sigma)
 
 def macd(source, fastlen, slowlen, siglen):
-    source = source.sort_index(ascending=True)
+    source = source[-1::-1]
     macd = source.ewm(span=fastlen).mean() - source.ewm(span=slowlen).mean()
     signal = macd.rolling(siglen).mean()
     return (macd, signal)
 
 def hlband(source, period):
-    source = source.sort_index(ascending=True)
+    source = source[-1::-1]
     high = source.rolling(period).max()
     low = source.rolling(period).min()
     return (high, low)
@@ -69,8 +69,8 @@ def wvf(close, low, period = 22, bbl = 20, mult = 2.0, lb = 50, ph = 0.85, pl=1.
     ph:     Highest Percentile - 0.90=90%, 0.95=95%, 0.99=99%
     pl:     Lowest Percentile - 1.10=90%, 1.05=95%, 1.01=99%
     """
-    close = close.sort_index(ascending=True)
-    low = low.sort_index(ascending=True)
+    close = close[-1::-1]
+    low = low[-1::-1]
 
     # VixFix
     close_max = close.rolling(period).max()
@@ -93,8 +93,8 @@ def wvf_inv(close, high, period = 22, bbl = 20, mult = 2.0, lb = 50, ph = 0.85, 
     ph:     Highest Percentile - 0.90=90%, 0.95=95%, 0.99=99%
     pl:     Lowest Percentile - 1.10=90%, 1.05=95%, 1.01=99%
     """
-    close = close.sort_index(ascending=True)
-    high = high.sort_index(ascending=True)
+    close = close[-1::-1]
+    high = high[-1::-1]
 
     # VixFix_inverse
     close_min = close.rolling(period).min()
