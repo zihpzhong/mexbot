@@ -16,7 +16,7 @@ position = dotdict()
 balance = dotdict()
 ticker = dotdict()
 
-qty_lot = 100
+qty_lot = 200
 profit_trigger = 80
 loss_trigger = -20
 trailing_offset = 10
@@ -268,8 +268,8 @@ if __name__ == "__main__":
     # トレールストップ価格
     trailing_stop = 0
 
-    # 最後にポジションを持った時間
-    last_position_time = datetime.utcnow() - timedelta(minutes=5)
+    # 次にエントリーする時間
+    next_entry_time = datetime.utcnow()
 
     while True:
         # 待機時間設定
@@ -296,13 +296,13 @@ if __name__ == "__main__":
             # if position.currentQty == 0:
             #     order('L', 'buy', qty=qty_lot, limit=int(long_entry_price[0]+0.5), stop=int(long_entry_price[0]+0.5))
             #     order('S', 'sell', qty=qty_lot, limit=int(short_entry_price[0]-0.5), stop=int(short_entry_price[0]-0.5))
-            if datetime.utcnow() - last_position_time > timedelta(minutes=4):
+            if datetime.utcnow() > next_entry_time:
                 entry('L', 'buy', qty=qty_lot, limit=long_entry_price[0], stop=long_entry_price[0]+0.5)
                 entry('S', 'sell', qty=qty_lot, limit=short_entry_price[0], stop=short_entry_price[0]-0.5)
 
             # 利確/損切り
             if position.currentQty > 0:
-                last_position_time = datetime.utcnow()
+                next_entry_time = datetime.utcnow() + timedelta(minutes=5)
 
                 if ticker.ask > trailing_stop or trailing_stop == 0:
                     trailing_stop = ticker.ask
@@ -314,7 +314,7 @@ if __name__ == "__main__":
                 # elif pnl <= loss_trigger:
                 #     order('L_exit', side='sell', qty=position.currentQty)
             elif position.currentQty < 0:
-                last_position_time = datetime.utcnow()
+                next_entry_time = datetime.utcnow() + timedelta(minutes=5)
 
                 if ticker.bid < trailing_stop or trailing_stop == 0:
                     trailing_stop = ticker.bid
