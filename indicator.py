@@ -34,13 +34,12 @@ def rsi(source, period):
 def stoch(close, high, low, period):
     hline = high.rolling(period).max()
     lline = low.rolling(period).min()
-    close = close
     return 100 * (close - lline) / (hline - lline)
 
 def momentum(source, period):
     return source.diff(period)
 
-def bbands(source, period, mult=2):
+def bband(source, period, mult=2):
     middle = source.rolling(period).mean()
     sigma = source.rolling(period).std()
     upper = middle+sigma*mult
@@ -113,7 +112,7 @@ if __name__ == '__main__':
     # gwalk = np.cumprod(np.exp(scale*dn))*p0
     # data = pd.Series(gwalk)
 
-    ohlc = pd.read_csv('bitmex_20180419_5m.csv', index_col='timestamp', parse_dates=True)
+    ohlc = pd.read_csv('bitmex_20180419_1m.csv', index_col='timestamp', parse_dates=True)
 
     vsma = sma(ohlc.close, 10)
     vema = ema(ohlc.close, 10)
@@ -123,6 +122,7 @@ if __name__ == '__main__':
     (vwvf, lowerBand, upperBand, rangeHigh, rangeLow) = wvf(ohlc.close, ohlc.low)
     vhighest = highest(ohlc.high, 14)
     vlowest = lowest(ohlc.low, 14)
+    (vmacd, vsig) = macd(ohlc.close, 9, 26, 5)
 
     df = pd.DataFrame({
         'close':ohlc.close,
@@ -132,9 +132,13 @@ if __name__ == '__main__':
         'rsi':vrsi,
         'stochrsi':vstoch,
         'wvf':vwvf,
-        'wvf-upper':lowerBand,
+        'wvf-upper':upperBand,
         'wvf-lower':lowerBand,
+        'wvf-high':rangeHigh,
+        'wvf-low':rangeLow,
         'highest':vhighest,
         'lowest':vlowest,
+        'macd':vmacd,
+        'macd-signal':vsig,
         }, index=ohlc.index)
     print(df.to_csv())
