@@ -30,27 +30,36 @@ def fetch_ticker(symbol=settings.symbol, timeframe=settings.timeframe):
 
 
 def fetch_ohlcv(symbol=settings.symbol, timeframe=settings.timeframe):
-    """OHLCVを取得"""
+    """過去100件のOHLCVを取得"""
+    start_time_offset = {
+        '1m': timedelta(minutes=1*100),
+        '5m': timedelta(minutes=5*100),
+        '1h': timedelta(hours=1*100),
+        '1d': timedelta(days=1*100),
+    }
     market = exchange.market(symbol)
     req = {
         'symbol': market['id'],
         'binSize': exchange.timeframes[timeframe],
         'partial': 'false',     # True == include yet-incomplete current bins
-        'reverse': 'true',
+        'reverse': 'false',
+        'startTime': datetime.utcnow() - start_time_offset[timeframe],
     }
     res = exchange.publicGetTradeBucketed(req)
     df = pd.DataFrame(res)
     df['timestamp'] = pd.to_datetime(df['timestamp'])
-    #df['timestamp'] = pd.to_datetime(df['timestamp']) + timedelta(hours=+9)
-    # d = {
-    #     'open':df['close'][0],
-    #     'high':df['high'][0],
-    #     'low':df['low'][0],
-    #     'close':df['close'][0],
-    #     'volume':df['volume'][0],
-    # }
-    # logger.info("OHLCV: {open} {high} {low} {close} {volume}".format(**d))
-    return (df['open'], df['high'], df['low'], df['close'], df['volume'])
+    logger.info("OHLCV: {open} {high} {low} {close} {volume}".format(**df.iloc[-1]))
+    # return (df['open'], df['high'], df['low'], df['close'], df['volume'])
+    return df
+
+
+def last(source, period=0):
+    """
+    last(close)     現在の足
+    last(close, 0)  現在の足
+    last(close, 1)  1つ前の足
+    """
+    return source.iat[-1-period]
 
 
 def fetch_position(symbol=settings.symbol):
@@ -294,22 +303,19 @@ if __name__ == "__main__":
             balance = fetch_balance()
 
             # 足取得
-            (open, high, low, close, volume) = fetch_ohlcv()
+            ohlc = fetch_ohlcv()
 
             # エントリー/エグジット
-            long_entry_price = highest(high, breakout_in)
-            short_entry_price = lowest(low, breakout_in)
+            long_entry_price = last(highest(ohlc.high, breakout_in))
+            short_entry_price = last(lowest(ohlc.low, breakout_in))
 
             # ロット数計算
             qty_lot = calcbestlots()
 
             # 注文
-            # if position.currentQty == 0:
-            #     order('L', 'buy', qty=qty_lot, limit=int(long_entry_price[0]+0.5), stop=int(long_entry_price[0]+0.5))
-            #     order('S', 'sell', qty=qty_lot, limit=int(short_entry_price[0]-0.5), stop=int(short_entry_price[0]-0.5))
             if datetime.utcnow() > next_entry_time:
-                entry('L', 'buy', qty=qty_lot, limit=long_entry_price[0], stop=long_entry_price[0]+0.5)
-                entry('S', 'sell', qty=qty_lot, limit=short_entry_price[0], stop=short_entry_price[0]-0.5)
+                entry('L', 'buy', qty=qty_lot, limit=long_entry_price, stop=long_entry_price+0.5)
+                entry('S', 'sell', qty=qty_lot, limit=short_entry_price, stop=short_entry_price-0.5)
 
             # 利確/損切り
             if position.currentQty > 0:
@@ -317,25 +323,17 @@ if __name__ == "__main__":
 
                 if ticker.ask > trailing_stop or trailing_stop == 0:
                     trailing_stop = ticker.ask
+
                 if ticker.ask <= (trailing_stop - trailing_offset):
                     order('L_exit', side='sell', qty=position.currentQty, limit=ticker.ask)
-                # pnl = ticker.ask - position.avg_price
-                # if pnl >= profit_trigger:
-                #     order('L_exit', side='sell', qty=position.currentQty, limit=ticker.ask)
-                # elif pnl <= loss_trigger:
-                #     order('L_exit', side='sell', qty=position.currentQty)
             elif position.currentQty < 0:
                 next_entry_time = datetime.utcnow() + timedelta(minutes=5)
 
                 if ticker.bid < trailing_stop or trailing_stop == 0:
                     trailing_stop = ticker.bid
+
                 if ticker.bid >= (trailing_stop + trailing_offset):
                     order('S_exit', side='buy', qty=-position.currentQty, limit=ticker.bid)
-                # pnl = position.avg_price - ticker.bid
-                # if pnl >= profit_trigger:
-                #     order('S_exit', side='buy', qty=-position.currentQty, limit=ticker.bid)
-                # elif pnl <= loss_trigger:
-                #     order('S_exit', side='buy', qty=-position.currentQty)
             else:
                 trailing_stop = 0
                 cancel('L_exit')
