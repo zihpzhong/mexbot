@@ -16,7 +16,7 @@ position = dotdict()
 balance = dotdict()
 ticker = dotdict()
 
-fixed_usd_unit = 2000
+lot_ratio_to_asset = 0.25
 qty_lot = 200
 profit_trigger = 80
 loss_trigger = -20
@@ -249,9 +249,9 @@ def entry(myid, side, qty, limit=None, stop=None, trailing_offset=None, symbol=s
     order(myid, side, qty, limit, stop, trailing_offset, symbol)
 
 
-def calcbestlots():
-    # 残高に固定ユニット数（USドル単位）をかけた値をロット数とする
-    lots = int((balance.BTC.free * fixed_usd_unit))
+def bestlots():
+    # 残高に固定比率をかけて最終価格をかけた値をロットとする
+    lots = int(balance.BTC.free * lot_ratio_to_asset * ticker.last)
     logger.info("LOTS: " + str(lots))
     return lots
 
@@ -310,12 +310,7 @@ if __name__ == "__main__":
             short_entry_price = last(lowest(ohlc.low, breakout_in))
 
             # ロット数計算
-            qty_lot = calcbestlots()
-
-            # 注文
-            if datetime.utcnow() > next_entry_time:
-                entry('L', 'buy', qty=qty_lot, limit=long_entry_price, stop=long_entry_price+0.5)
-                entry('S', 'sell', qty=qty_lot, limit=short_entry_price, stop=short_entry_price-0.5)
+            qty_lot = bestlots()
 
             # 利確/損切り
             if position.currentQty > 0:
@@ -335,9 +330,14 @@ if __name__ == "__main__":
                 if ticker.bid >= (trailing_stop + trailing_offset):
                     order('S_exit', side='buy', qty=-position.currentQty, limit=ticker.bid)
             else:
+                # 利確/損切り 注文キャンセル
                 trailing_stop = 0
                 cancel('L_exit')
                 cancel('S_exit')
+                # 注文
+                if datetime.utcnow() > next_entry_time:
+                    entry('L', 'buy', qty=qty_lot, limit=long_entry_price, stop=long_entry_price+0.5)
+                    entry('S', 'sell', qty=qty_lot, limit=short_entry_price, stop=short_entry_price-0.5)
 
         except ccxt.DDoSProtection as e:
             logging.warning(type(e).__name__ + ": {0}".format(e))
