@@ -10,7 +10,7 @@ from utils import dotdict
 def Backtest(ohlc,
     buy_entry=None, sell_entry=None, buy_exit=None, sell_exit=None,
     stop_buy_entry=None, stop_sell_entry=None, stop_buy_exit=None, stop_sell_exit=None,
-    lots=0.1, spread=0, take_profit=0, stop_loss=0, slippage=0):
+    lots=0.1, spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0):
     Open = ohlc.open.values #始値
     Low = ohlc.low.values #安値
     High = ohlc.high.values #高値
@@ -19,6 +19,7 @@ def Backtest(ohlc,
     N = len(ohlc) #データサイズ
     buyExecPrice = sellExecPrice = 0.0 # 売買価格
     buyStopEntry = buyStopExit = sellStopEntry = sellStopExit = 0
+    buyTrailingStop = sellTrailingStop = 0
 
     LongTrade = np.zeros(N) # 買いトレード情報
     ShortTrade = np.zeros(N) # 売りトレード情報
@@ -64,6 +65,7 @@ def Backtest(ohlc,
                 buyExecPrice = OpenPrice + spread + slippage
                 LongTrade[i] = buyExecPrice #買いポジションオープン
                 BuyNow = True
+                buyTrailingStop = OpenPrice
         else:
             ClosePrice = 0
             # 成り行き注文
@@ -99,6 +101,7 @@ def Backtest(ohlc,
                 sellExecPrice = OpenPrice - slippage
                 ShortTrade[i] = sellExecPrice #売りポジションオープン
                 SellNow = True
+                sellTrailingStop = OpenPrice
         else:
             ClosePrice = 0
             # 成り行き注文
@@ -130,6 +133,14 @@ def Backtest(ohlc,
                 LimitPrice = buyExecPrice + take_profit
                 if High[i] >= LimitPrice:
                     ClosePrice = LimitPrice - slippage
+            elif trailing_stop > 0:
+                # トレーリングストップ価格更新
+                traillingPrice = High[i] - trailing_stop
+                if traillingPrice > buyTrailingStop:
+                    buyTrailingStop = traillingPrice
+                # 安値がトレーリングストップ価格を下回っていたら決済
+                if Low[i] < buyTrailingStop:
+                    ClosePrice = buyTrailingStop - slippage
             if ClosePrice > 0:
                 LongTrade[i] = -ClosePrice #買いポジションクローズ
                 LongPL[i] = (ClosePrice - buyExecPrice) * lots #損益確定
@@ -147,6 +158,14 @@ def Backtest(ohlc,
                 LimitPrice = sellExecPrice - take_profit
                 if Low[i] <= LimitPrice:
                     ClosePrice = LimitPrice + slippage
+            elif trailing_stop > 0:
+                # トレーリングストップ価格更新
+                traillingPrice = Low[i] + trailing_stop
+                if traillingPrice < sellTrailingStop:
+                    sellTrailingStop = traillingPrice
+                # 高値がトレーリングストップ価格を上回っていたら決済
+                if High[i] > sellTrailingStop:
+                    ClosePrice = sellTrailingStop + slippage
             if ClosePrice > 0:
                 ShortTrade[i] = -ClosePrice #売りポジションクローズ
                 ShortPL[i] = (sellExecPrice - ClosePrice) * lots #損益確定
@@ -194,6 +213,8 @@ class BacktestReport:
         self.Long.LossMax = LongPL.min()
         if self.Long.LossTrades > 0:
             self.Long.LossAverage = self.Long.GrossLoss / self.Long.LossTrades
+        else:
+            self.Long.LossAverage = 0
 
         # ショート統計
         ShortPL = PL['Short']
@@ -213,6 +234,8 @@ class BacktestReport:
         self.Short.LossMax = ShortPL.min()
         if self.Short.LossTrades > 0:
             self.Short.LossAverage = self.Short.GrossLoss / self.Short.LossTrades
+        else:
+            self.Short.LossTrades = 0
 
         # 全体統計
         self.Trades = self.Long.Trades + self.Short.Trades
@@ -224,8 +247,8 @@ class BacktestReport:
         self.Profit = self.GrossProfit + self.GrossLoss
         self.Equity = (LongPL + ShortPL).cumsum()
         self.DrawDown = (self.Equity.cummax() - self.Equity).max()
-        self.ProfitFactor = self.GrossProfit / -self.GrossLoss if -self.GrossLoss > 0 else 0.0
-        self.RecoveryFactor = self.ProfitFactor / self.DrawDown if self.DrawDown > 0 else 0.0
+        self.ProfitFactor = self.GrossProfit / -self.GrossLoss if -self.GrossLoss > 0 else self.GrossProfit
+        self.RecoveryFactor = self.ProfitFactor / self.DrawDown if self.DrawDown > 0 else self.ProfitFactor
 
     def __str__(self):
         return 'Long\n' \
