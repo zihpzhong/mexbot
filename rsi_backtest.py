@@ -7,7 +7,7 @@ from numba import jit
 from indicator import *
 
 # テストデータ読み込み
-data = pd.read_csv('bitmex_20180415_5m.csv', index_col='timestamp', parse_dates=True)
+data = pd.read_csv('csv/bitmex_20180420_1m.csv', index_col='timestamp', parse_dates=True)
 
 @jit
 def rsi_backtest(ohlc, length, overBought, overSold):
@@ -44,22 +44,25 @@ def rsi_backtest(ohlc, length, overBought, overSold):
 
     return Backtest(data, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit,
         stop_buy_entry=long_entry_price, stop_sell_entry=short_entry_price, stop_buy_exit=long_exit_price, stop_sell_exit=short_exit_price,
-        lots=1, spread=0, take_profit=0, stop_loss=0, slippage=0)
+        lots=1, spread=0, take_profit=0, stop_loss=0, trailing_stop=10, slippage=0)
 
 length = 14
-overBought = 70
+overBought = 78
 overSold = 30
 
-# report = rsi_backtest(data, length, overBought, overSold)
-# print(report)
-# exit()
+report = rsi_backtest(data, length, overBought, overSold)
+print(report)
+report.Raw.Trades.to_csv('trades.csv')
+report.Raw.PL.to_csv('pl.csv')
+report.Equity.to_csv('equity.csv')
+exit()
 
 def objective(args):
     length = int(args['length'])
     overBought = int(args['overBought'])
     overSold = int(args['overSold'])
 
-    if overBought < overSold:
+    if overBought <= overSold:
     	return 10000
 
     report = rsi_backtest(data, length, overBought, overSold)
@@ -75,7 +78,7 @@ hyperopt_parameters = {
 }
 
 # iterationする回数
-max_evals = 400
+max_evals = 1000
 
 # 試行の過程を記録するインスタンス
 trials = Trials()
