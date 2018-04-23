@@ -100,6 +100,24 @@ def wvf_inv(close, high, period = 22, bbl = 20, mult = 2.0, lb = 50, ph = 0.85, 
     rangeLow = wvf_inv.rolling(lb).min() * pl
     return (wvf_inv, lowerBand, upperBand, rangeHigh, rangeLow)
 
+def tr(close, high, low):
+    diff_hl = high - low
+    last = close.shift(1).fillna(close[0])
+    diff_hc = high - last
+    diff_hc = diff_hc.abs()
+    diff_lc = low - last
+    diff_lc = diff_lc.abs()
+    tr = diff_hl
+    sel = diff_hc > tr
+    tr[sel] = diff_hc[sel]
+    sel = diff_lc > tr
+    tr[sel] = diff_lc[sel]
+    return tr
+
+def atr(close, high, low, period):
+    alpha = 1.0 / (period)
+    return tr(close, high, low).ewm(alpha=alpha).mean()
+
 
 if __name__ == '__main__':
 
@@ -112,7 +130,7 @@ if __name__ == '__main__':
     # gwalk = np.cumprod(np.exp(scale*dn))*p0
     # data = pd.Series(gwalk)
 
-    ohlc = pd.read_csv('bitmex_20180419_1m.csv', index_col='timestamp', parse_dates=True)
+    ohlc = pd.read_csv('csv/bitmex_20180419_1m.csv', index_col='timestamp', parse_dates=True)
 
     vsma = sma(ohlc.close, 10)
     vema = ema(ohlc.close, 10)
@@ -123,6 +141,8 @@ if __name__ == '__main__':
     vhighest = highest(ohlc.high, 14)
     vlowest = lowest(ohlc.low, 14)
     (vmacd, vsig) = macd(ohlc.close, 9, 26, 5)
+    vtr = tr(ohlc.close, ohlc.high, ohlc.low)
+    vatr = atr(ohlc.close, ohlc.high, ohlc.low, 14)
 
     df = pd.DataFrame({
         'close':ohlc.close,
@@ -140,5 +160,7 @@ if __name__ == '__main__':
         'lowest':vlowest,
         'macd':vmacd,
         'macd-signal':vsig,
+        'tr':vtr,
+        'atr':vatr,
         }, index=ohlc.index)
     print(df.to_csv())
