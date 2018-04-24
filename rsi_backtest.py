@@ -10,17 +10,17 @@ from indicator import *
 data = pd.read_csv('csv/bitmex_20180420_1m.csv', index_col='timestamp', parse_dates=True)
 
 @jit
-def rsi_backtest(ohlc, length, overBought, overSold):
+def rsi_backtest(ohlc, length, overBought, overSold, trailing_stop):
 
     # インジケーター作成
     vrsi = rsi(ohlc.close, length)
     vrsi_last = vrsi.shift(1)
 
     # エントリー／イグジット
-    long_entry = (vrsi > overSold) & (vrsi_last < overSold)
-    long_exit = (vrsi > overBought) & (vrsi_last < overBought)
-    short_entry = (vrsi < overBought) & (vrsi_last > overBought)
-    short_exit = (vrsi < overSold) & (vrsi_last > overSold)
+    long_entry = crossover(vrsi, overSold)
+    long_exit = crossover(vrsi, overBought)
+    short_entry = crossunder(vrsi, overBought)
+    short_exit = crossunder(vrsi, overSold)
 
     long_entry_price = None
     long_exit_price = None
@@ -32,25 +32,19 @@ def rsi_backtest(ohlc, length, overBought, overSold):
     short_entry[:length] = False
     short_exit[:length] = False
 
-    # long_entry_price[:length] = 0
-    # long_exit_price[:length] = 0
-    # short_entry_price[:length] = 0
-    # short_exit_price[:length] = 0
-
-    entry_exit = pd.DataFrame({'close':ohlc.close, 'rsi':vrsi, 'rsi-last':vrsi_last,
-        'long_entry_price':long_entry_price, 'long_exit_price':long_exit_price, 'long_entry':long_entry, 'long_exit':long_exit,
-        'short_entry_price':short_entry_price, 'short_entry':short_entry, 'short_exit_price':short_exit_price, 'short_exit':short_exit})#, index=data.index)
+    entry_exit = pd.DataFrame({'close':ohlc.close, 'rsi':vrsi, 'rsi-last':vrsi_last, 'long_entry':long_entry, 'long_exit':long_exit, 'short_entry':short_entry, 'short_exit':short_exit})
     entry_exit.to_csv('entry_exit.csv')
 
     return Backtest(data, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit,
         stop_buy_entry=long_entry_price, stop_sell_entry=short_entry_price, stop_buy_exit=long_exit_price, stop_sell_exit=short_exit_price,
-        lots=1, spread=0, take_profit=0, stop_loss=0, trailing_stop=10, slippage=0)
+        lots=1, spread=0, take_profit=0, stop_loss=0, trailing_stop=trailing_stop, slippage=0)
 
 length = 14
 overBought = 78
 overSold = 30
+trailing_stop = 0
 
-report = rsi_backtest(data, length, overBought, overSold)
+report = rsi_backtest(data, length, overBought, overSold, trailing_stop)
 print(report)
 report.Raw.Trades.to_csv('trades.csv')
 report.Raw.PL.to_csv('pl.csv')
@@ -58,27 +52,28 @@ report.Equity.to_csv('equity.csv')
 exit()
 
 def objective(args):
-    length = int(args['length'])
-    overBought = int(args['overBought'])
-    overSold = int(args['overSold'])
+    # length = int(args['length'])
+    # overBought = int(args['overBought'])
+    # overSold = int(args['overSold'])
+    trailing_stop = int(args['trailing_stop'])
 
-    if overBought <= overSold:
-    	return 10000
+    # if overBought <= overSold:
+    # 	return 10000
 
-    report = rsi_backtest(data, length, overBought, overSold)
-
-    print(length, ',', overBought, ',', overSold, ',', report.ProfitFactor, ',', report.Profit, ',', report.GrossProfit, ',', report.GrossLoss, ',', report.Trades, ',', report.WinTrades, ',', report.LossTrades, ',', report.WinRatio)
-    return -1 * report.Profit
+    report = rsi_backtest(data, length, overBought, overSold, trailing_stop)
+    print(length, ',', overBought, ',', overSold, ',', trailing_stop, ',', report.ProfitFactor, ',', report.Profit, ',', report.GrossProfit, ',', report.GrossLoss, ',', report.Trades, ',', report.WinTrades, ',', report.LossTrades, ',', report.WinRatio, ',', report.ExpectedValue,)
+    return -1 * report.ProfitFactor
 
 # 探索するパラメータ
 hyperopt_parameters = {
-    'length': hp.quniform('length', 1, 30, 1),
-    'overBought': hp.quniform('overBought', 1, 99, 3),
-    'overSold': hp.quniform('overSold', 1, 99, 3),
+#    'length': hp.quniform('length', 1, 30, 1),
+    # 'overBought': hp.quniform('overBought', 1, 99, 1),
+    # 'overSold': hp.quniform('overSold', 1, 99, 1),
+    'trailing_stop': hp.quniform('trailing_stop', 0, 99, 1),
 }
 
 # iterationする回数
-max_evals = 1000
+max_evals = 100
 
 # 試行の過程を記録するインスタンス
 trials = Trials()
@@ -102,5 +97,10 @@ best = fmin(
 
 print('best:', best)
 
-report = rsi_backtest(data, int(best['length']), int(best['overBought']), int(best['overSold']))
+length = int(best['length']) if 'length' in best else length
+overBought = int(best['overBought']) if 'overBought' in best else overBought
+overSold = int(best['overSold']) if 'overSold' in best else overSold
+trailing_stop = int(best['trailing_stop']) if 'trailing_stop' in best else trailing_stop
+
+report = rsi_backtest(data, length, overBought, overSold, trailing_stop)
 print(report)
