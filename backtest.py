@@ -19,7 +19,6 @@ def Backtest(ohlc,
     N = len(ohlc) #データサイズ
     buyExecPrice = sellExecPrice = 0.0 # 売買価格
     buyStopEntry = buyStopExit = sellStopEntry = sellStopExit = 0
-    buyTrailingStop = sellTrailingStop = 0
 
     LongTrade = np.zeros(N) # 買いトレード情報
     ShortTrade = np.zeros(N) # 売りトレード情報
@@ -27,7 +26,7 @@ def Backtest(ohlc,
     LongPL = np.zeros(N) # 買いポジションの損益
     ShortPL = np.zeros(N) # 売りポジションの損益
 
-    place_holder = np.zeros(N) # 売りポジションの損益
+    place_holder = np.zeros(N) # プレースホルダ
 
     buy_entry = place_holder if buy_entry is None else buy_entry.values
     sell_entry = place_holder if sell_entry is None else sell_entry.values
@@ -38,6 +37,11 @@ def Backtest(ohlc,
     stop_sell_entry = place_holder if stop_sell_entry is None else stop_sell_entry.values
     stop_buy_exit = place_holder if stop_buy_exit is None else stop_buy_exit.values
     stop_sell_exit = place_holder if stop_sell_exit is None else stop_sell_exit.values
+
+    # トレーリングストップ価格を設定(STOP注文として処理する)
+    if trailing_stop > 0:
+        stop_buy_exit = ohlc.high - trailing_stop
+        stop_sell_exit = ohlc.low + trailing_stop
 
     #
     # 1.シグナルが出た次の足の始値で成行
@@ -65,7 +69,6 @@ def Backtest(ohlc,
                 buyExecPrice = OpenPrice + spread + slippage
                 LongTrade[i] = buyExecPrice #買いポジションオープン
                 BuyNow = True
-                buyTrailingStop = OpenPrice
         else:
             ClosePrice = 0
             # 成り行き注文
@@ -101,7 +104,6 @@ def Backtest(ohlc,
                 sellExecPrice = OpenPrice - slippage
                 ShortTrade[i] = sellExecPrice #売りポジションオープン
                 SellNow = True
-                sellTrailingStop = OpenPrice
         else:
             ClosePrice = 0
             # 成り行き注文
@@ -133,14 +135,6 @@ def Backtest(ohlc,
                 LimitPrice = buyExecPrice + take_profit
                 if High[i] >= LimitPrice:
                     ClosePrice = LimitPrice - slippage
-            elif trailing_stop > 0:
-                # トレーリングストップ価格更新
-                traillingPrice = High[i] - trailing_stop
-                if traillingPrice > buyTrailingStop:
-                    buyTrailingStop = traillingPrice
-                # 安値がトレーリングストップ価格を下回っていたら決済
-                if Low[i] < buyTrailingStop:
-                    ClosePrice = buyTrailingStop - slippage
             if ClosePrice > 0:
                 LongTrade[i] = -ClosePrice #買いポジションクローズ
                 LongPL[i] = (ClosePrice - buyExecPrice) * lots #損益確定
@@ -158,14 +152,6 @@ def Backtest(ohlc,
                 LimitPrice = sellExecPrice - take_profit
                 if Low[i] <= LimitPrice:
                     ClosePrice = LimitPrice + slippage
-            elif trailing_stop > 0:
-                # トレーリングストップ価格更新
-                traillingPrice = Low[i] + trailing_stop
-                if traillingPrice < sellTrailingStop:
-                    sellTrailingStop = traillingPrice
-                # 高値がトレーリングストップ価格を上回っていたら決済
-                if High[i] > sellTrailingStop:
-                    ClosePrice = sellTrailingStop + slippage
             if ClosePrice > 0:
                 ShortTrade[i] = -ClosePrice #売りポジションクローズ
                 ShortPL[i] = (sellExecPrice - ClosePrice) * lots #損益確定
@@ -244,11 +230,15 @@ class BacktestReport:
         self.LossTrades = self.Long.LossTrades + self.Short.LossTrades
         self.GrossProfit = self.Long.GrossProfit + self.Short.GrossProfit
         self.GrossLoss = self.Long.GrossLoss + self.Short.GrossLoss
+        self.WinAverage = self.GrossProfit / self.WinTrades if self.WinTrades > 0 else 0
+        self.LossAverage = self.GrossLoss / self.LossTrades if self.LossTrades > 0 else 0
         self.Profit = self.GrossProfit + self.GrossLoss
         self.Equity = (LongPL + ShortPL).cumsum()
         self.DrawDown = (self.Equity.cummax() - self.Equity).max()
         self.ProfitFactor = self.GrossProfit / -self.GrossLoss if -self.GrossLoss > 0 else self.GrossProfit
         self.RecoveryFactor = self.ProfitFactor / self.DrawDown if self.DrawDown > 0 else self.ProfitFactor
+        self.ExpectedProfit = (self.WinAverage * self.WinRatio) + ((1 - self.WinRatio) * self.LossAverage)
+        self.ExpectedValue = (self.WinRatio * (self.WinAverage / abs(self.LossAverage))) - (1 - self.WinRatio) if self.LossAverage < 0 else 1
 
     def __str__(self):
         return 'Long\n' \
@@ -278,11 +268,15 @@ class BacktestReport:
         '\nTotal\n' \
         '  Trades :' + str(self.Trades) + '\n' \
         '  WinTrades :' + str(self.WinTrades) + '\n' \
+        '  WinAverage :' + str(self.WinAverage) + '\n' \
         '  WinRatio :' + str(self.WinRatio) + '\n' \
         '  LossTrades :' + str(self.LossTrades) + '\n' \
+        '  LossAverage :' + str(self.LossAverage) + '\n' \
         '  GrossProfit :' + str(self.GrossProfit) + '\n' \
         '  GrossLoss :' + str(self.GrossLoss) + '\n' \
         '  Profit :' + str(self.Profit) + '\n' \
         '  DrawDown :' + str(self.DrawDown) + '\n' \
         '  ProfitFactor :' + str(self.ProfitFactor) + '\n' \
-        '  RecoveryFactor :' + str(self.RecoveryFactor) + '\n'
+        '  RecoveryFactor :' + str(self.RecoveryFactor) + '\n' \
+        '  ExpectedProfit :' + str(self.ExpectedProfit) + '\n' \
+        '  ExpectedValue :' + str(self.ExpectedValue) + '\n'
