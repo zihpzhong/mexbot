@@ -118,6 +118,12 @@ def atr(close, high, low, period):
     alpha = 1.0 / (period)
     return tr(close, high, low).ewm(alpha=alpha).mean()
 
+def crossover(a, b):
+    return (a > b) & (b > a.shift(1))
+
+def crossunder(a, b):
+    return (a < b) & (b < a.shift(1))
+
 
 if __name__ == '__main__':
 
