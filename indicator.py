@@ -124,6 +124,13 @@ def crossover(a, b):
 def crossunder(a, b):
     return (a < b) & (b < a.shift(1))
 
+def last(source, period=0):
+    """
+    last(close)     現在の足
+    last(close, 0)  現在の足
+    last(close, 1)  1つ前の足
+    """
+    return source.iat[-1-period]
 
 if __name__ == '__main__':
 

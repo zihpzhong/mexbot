@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
-import sys
 from time import sleep
+from datetime import datetime, timedelta, timezone
+import sys
+import logging
+import logging.config
 import ccxt
 import pandas as pd
-from datetime import datetime, timedelta
 from utils import dotdict
+from indicator import *
+from settings import settings
 
 
 class Trading:
@@ -14,6 +18,29 @@ class Trading:
     def loop(self, strategy):
         pass
 
+def excahge_error(func):
+    def wrapper(*args, **kwargs):
+        self = args[0]
+        for retry in range(0, 10):
+            waitsec = 1
+            try:
+                return func(*args, **kwargs)
+            except ccxt.DDoSProtection as e:
+                self.logger.warning(type(e).__name__ + ": {0}".format(e))
+                waitsec = 5
+            except ccxt.RequestTimeout as e:
+                self.logger.warning(type(e).__name__ + ": {0}".format(e))
+                waitsec = 5
+            except ccxt.ExchangeNotAvailable as e:
+                self.logger.warning(type(e).__name__ + ": {0}".format(e))
+                waitsec = 20
+            except ccxt.AuthenticationError as e:
+                self.logger.warning(type(e).__name__ + ": {0}".format(e))
+                break
+            except ccxt.ExchangeError as e:
+                self.logger.warning(type(e).__name__ + ": {0}".format(e))
+            sleep(waitsec)
+    return wrapper
 
 class Strategy:
     def __init__(self, yourlogic, interval=60):
@@ -31,7 +58,7 @@ class Strategy:
         # 動作タイミング
         self.settings.interval = interval
 
-        # OHLCV設定
+        # ohlcv設定
         self.settings.timeframe = '1m'
         self.settings.partial = False
 
@@ -43,15 +70,13 @@ class Strategy:
 
         # リスク設定
         self.risk = dotdict()
-        self.risk.max_position_size = 100
-        self.risk.max_drawdown = 1000
+        self.risk.max_position_size = 1000
+        self.risk.max_drawdown = 5000
 
         # ポジション情報
         self.position = dotdict()
-        self.position.current_qty = 0
+        self.position.qty = 0
         self.position.avg_price = 0
-        self.position.profit_and_loss = 0
-        self.position.profit_and_loss_pct = 0
 
         # 注文情報
         self.orders = dotdict()
@@ -60,103 +85,111 @@ class Strategy:
         self.ticker = dotdict()
 
         # ohlcv情報
-        self.df_ohlcv = None
+        self.ohlcv = None
 
-    @staticmethod
-    def safe_value(value, default):
-        if value is None:
-            value = default
-        return value
+        # ログ設定
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
 
+
+    @excahge_error
     def fetch_ticker(self, symbol=None, timeframe=None):
         symbol = symbol or self.settings.symbol
         timeframe = timeframe or self.settings.timeframe
-        ticker = dotdict(self.exchange.fetchTicker(symbol, params={self.exchange.timeframes[timeframe]}))
-        #print("{datetime} TICK: ohlc {open} {high} {low} {close} bid {bid} ask {ask}".format(**ticker))
+        ticker = dotdict(self.exchange.fetch_ticker(symbol, params={'binSize': self.exchange.timeframes[timeframe]}))
+        self.logger.info("TICK: ohlc {open} {high} {low} {close} bid {bid} ask {ask}".format(**ticker))
         return ticker
 
+    @excahge_error
     def fetch_ohlcv(self, symbol=None, timeframe=None):
-        """OHLCVを取得"""
+        """過去100件のOHLCVを取得"""
         symbol = symbol or self.settings.symbol
         timeframe = timeframe or self.settings.timeframe
+        partial = 'true' if self.settings.partial else 'false'
+        start_time_offset = {
+            '1m': timedelta(minutes=1*100),
+            '5m': timedelta(minutes=5*100),
+            '1h': timedelta(hours=1*100),
+            '1d': timedelta(days=1*100),
+        }
         market = self.exchange.market(symbol)
         req = {
             'symbol': market['id'],
             'binSize': self.exchange.timeframes[timeframe],
-            'partial': 'true' if self.settings.partial else 'false',     # True == include yet-incomplete current bins
-            'reverse': 'true',
+            'partial': partial,     # True == include yet-incomplete current bins
+            'reverse': 'false',
+            'startTime': datetime.utcnow() - start_time_offset[timeframe],
         }
         res = self.exchange.publicGetTradeBucketed(req)
         df = pd.DataFrame(res)
         df['timestamp'] = pd.to_datetime(df['timestamp'])
+        self.logger.info("OHLCV: {open} {high} {low} {close} {volume}".format(**df.iloc[-1]))
         return df
 
+    @excahge_error
     def fetch_position(self, symbol=None):
         """現在のポジションを取得"""
         symbol = symbol or self.settings.symbol
         res = self.exchange.privateGetPosition()
-        market = self.exchange.market(symbol)
-        pos = [x for x in res if x['symbol'] == market['id']]
+        pos = [x for x in res if x['symbol'] == self.exchange.market(symbol)['id']]
         if len(pos):
             pos = dotdict(pos[0])
             pos.timestamp = pd.to_datetime(pos.timestamp)
             if pos.avgCostPrice is not None:
-                pos.avg_price = pos.avgCostPrice
                 current_cost = pos.currentQty / pos.avgCostPrice
                 if pos.currentQty > 0:
-                    unrealized_cost = pos.currentQty / self.ticker.ask
+                    unrealized_cost = pos.currentQty / ticker.ask
                     pos.profit_and_loss = int((current_cost - unrealized_cost) * 100000000)
                     pos.profit_and_loss_pct = ((current_cost / unrealized_cost) * 100) - 100
                 else:
-                    unrealized_cost = pos.currentQty / self.ticker.bid
+                    unrealized_cost = pos.currentQty / ticker.bid
                     pos.profit_and_loss = int((current_cost - unrealized_cost) * 100000000)
                     pos.profit_and_loss_pct = 100 - ((current_cost / unrealized_cost) * 100)
             else:
                 pos.profit_and_loss = 0
                 pos.profit_and_loss_pct = 0
-                pos.avg_price = 0
-            #pos.profit_and_loss = pos.simplePnl * 100
-            #pos.profit_and_loss_pct = pos.simplePnlPcnt * 100
         else:
             pos = dotdict()
             pos.currentQty = 0
-            pos.avgCostPrice = None
-            pos.commission = 0
-            pos.lastPrice = None
-            pos.avg_price = 0
+            pos.avgCostPrice = 0
             pos.profit_and_loss = 0
             pos.profit_and_loss_pct = 0
-        #print("{currentTimestamp} POSITION: qty {currentQty} cost {avg_price} pnl {profit_and_loss}({profit_and_loss_pct:.2f}%) {realisedPnl}".format(**pos))
+            pos.realisedPnl = 0
+        self.position.qty = pos.currentQty
+        self.position.avg_price = pos.avgCostPrice
+        self.logger.info("POSITION: qty {qty} cost {avg_price} pnl {profit_and_loss}({profit_and_loss_pct:.2f}%) {realisedPnl}".format(**pos))
         return pos
 
+    @excahge_error
     def fetch_balance(self):
         """資産情報取得"""
         balance = dotdict(self.exchange.fetch_balance())
-        #print("BALANCE: free {free} used {used} total {total}".format(**balance.BTC))
+        balance.BTC = dotdict(balance.BTC)
+        self.logger.info("BALANCE: free {free} used {used} total {total}".format(**balance.BTC))
         return balance
 
-    def fetch_funding(self, symbol=None):
-        """資金調達"""
-        symbol = symbol or self.settings.symbol
-        market = self.exchange.market(symbol)
-        req = {
-            'symbol': market['id'],
-            'reverse': 'true',
-        }
-        res = self.exchange.publicGetFunding(req)
-        df = pd.DataFrame(res)
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        #print("FUNDING:".format(**balance.BTC))
-        return df
-
+    @excahge_error
     def close_position(self, symbol=None):
         """現在のポジションを閉じる"""
         symbol = symbol or self.settings.symbol
         market = self.exchange.market(symbol)
         req = {'symbol': market['id']}
         res = self.exchange.privatePostOrderClosePosition(req)
-        print("{timestamp} CLOSE: {orderID} {side} {orderQty} {price}".format(**res))
+        self.logger.info("CLOSE: {orderID} {side} {orderQty} {price}".format(**res))
 
+    @excahge_error
+    def cancel(self, myid):
+        """注文をキャンセル"""
+        if myid in self.orders:
+            try:
+                order_id = self.orders[myid].id
+                res = self.exchange.cancel_order(order_id)
+                self.logger.info("CANCEL: {orderID} {side} {orderQty} {price}".format(**res['info']))
+            except ccxt.OrderNotFound as e:
+                self.logger.warning(type(e).__name__ + ": {0}".format(e))
+            del self.orders[myid]
+
+    @excahge_error
     def cancel_order_all(self, symbol=None):
         """現在の注文をキャンセル"""
         symbol = symbol or self.settings.symbol
@@ -164,10 +197,10 @@ class Strategy:
         req = {'symbol': market['id']}
         res = self.exchange.privateDeleteOrderAll(req)
         for r in res:
-            print("{timestamp} CANCEL: {orderID} {side} {orderQty} {price}".format(**r))
+            self.logger.info("CANCEL: {orderID} {side} {orderQty} {price}".format(**r))
 
-    def create_order(self, side, qty, limit, stop, symbol):
-        symbol = symbol or self.settings.symbol
+    @excahge_error
+    def create_order(self, side, qty, limit, stop, trailing_offset, symbol):
         type = 'market'
         params = {}
         if stop is not None and limit is not None:
@@ -182,12 +215,15 @@ class Strategy:
         elif limit is not None:
             type = 'limit'
             params['price'] = limit
+        if trailing_offset is not None:
+            params['pegPriceType'] = 'TrailingStopPeg'
+            params['pegOffsetValue'] = trailing_offset
         res = self.exchange.create_order(symbol, type, side, qty, None, params)
-        print("{timestamp} ORDER: {orderID} {side} {orderQty} {price}({stopPx})".format(**res['info']))
+        self.logger.info("ORDER: {orderID} {side} {orderQty} {price}({stopPx})".format(**res['info']))
         return dotdict(res)
 
-    def edit_order(self, id, side, qty, limit, stop, symbol):
-        symbol = symbol or self.settings.symbol
+    @excahge_error
+    def edit_order(self, id, side, qty, limit, stop, trailing_offset, symbol):
         type = 'market'
         params = {}
         if stop is not None and limit is not None:
@@ -200,79 +236,83 @@ class Strategy:
         elif limit is not None:
             type = 'limit'
             params['price'] = limit
+        if trailing_offset is not None:
+            params['pegOffsetValue'] = trailing_offset
         res = self.exchange.edit_order(id, symbol, type, side, qty, None, params)
-        print("{timestamp} EDIT: {orderID} {side} {orderQty} {price}".format(**res['info']))
+        self.logger.info("EDIT: {orderID} {side} {orderQty} {price}({stopPx})".format(**res['info']))
         return dotdict(res)
 
-    def order(self, myid, side, qty, limit=None, stop=None, symbol=None):
+    @excahge_error
+    def order(self, myid, side, qty, limit=None, stop=None, trailing_offset=None, symbol=None):
         """注文"""
-        symbol = symbol or self.settings.symbol
+        if qty > 0:
+            symbol = symbol or self.settings.symbol
+
+            if myid in self.orders:
+                order_id = self.orders[myid].id
+                order = dotdict(self.exchange.fetch_order(order_id))
+                # Todo
+                # 1.部分利確の確認
+                # 2.指値STOP注文の場合、トリガーされたかの確認
+                # どちらの場合もキャンセル必要と思う
+                if order.status == 'open':
+                    if order.type == 'stoplimit' and order.info['triggered'] == 'StopOrderTriggered':
+                        order = self.exchange.cancel_order(order_id)
+                        order = self.create_order(side, qty, limit, stop, trailing_offset, symbol)
+                    else:
+                        order = self.edit_order(order_id, side, qty, limit, stop, trailing_offset, symbol)
+                else:
+                    order = self.create_order(side, qty, limit, stop, trailing_offset, symbol)
+            else:
+                order = self.create_order(side, qty, limit, stop, trailing_offset, symbol)
+
+            self.orders[myid] = order
+
+    def entry(self, myid, side, qty, limit=None, stop=None, trailing_offset=None, symbol=None):
+        """注文"""
+
+        # 買いポジションがある場合、清算する
+        if side=='sell' and self.position.qty > 0:
+            qty = qty + self.position.qty
+
+        # 売りポジションがある場合、清算する
+        if side=='buy' and self.position.qty < 0:
+            qty = qty - self.position.qty
 
         qty_total = qty
         qty_limit = self.risk.max_position_size
 
         # 買いポジあり
-        if securrent_lf.position.qty > 0:
+        if self.position.qty > 0:
             # 買い増し
             if side == 'buy':
                 # 現在のポジ数を加算
-                qty_total = qty_total + self.position.current_qty
+                qty_total = qty_total + self.position.qty
             else:
                 # 反対売買の場合、ドテンできるように上限を引き上げる
-                qty_limit = qty_limit + self.position.current_qty
+                qty_limit = qty_limit + self.position.qty
 
         # 売りポジあり
-        if self.position.current_qty < 0:
+        if self.position.qty < 0:
             # 売りまし
             if side == 'sell':
                 # 現在のポジ数を加算
-                qty_total = qty_total + -self.position.current_qty
+                qty_total = qty_total + -self.position.qty
             else:
                 # 反対売買の場合、ドテンできるように上限を引き上げる
-                qty_limit = qty_limit + -self.position.current_qty
+                qty_limit = qty_limit + -self.position.qty
 
         # 購入数をポジション最大サイズに抑える
         if qty_total > qty_limit:
             qty = qty - (qty_total - qty_limit)
 
         # 注文
-        if qty > 0:
-            if myid in self.orders:
-                order_id = self.orders[myid].id
-                order = dotdict(self.exchange.fetchOrder(order_id))
-                # Todo
-                # 1.部分利確の確認
-                # 2.指値STOP注文の場合、トリガーされたかの確認
-                # どちのら場合もキャンセル必要と思う
-                if order.status == 'open':
-                    if order.type == 'stoplimit' and order.info['triggered'] == 'StopOrderTriggered':
-                        order = self.exchange.cancel_order(order_id)
-                        order = self.create_order(side, qty, limit, stop, symbol)
-                    else:
-                        order = edit_order(order_id, side, qty, limit, stop, symbol)
-                else:
-                    order = self.create_order(side, qty, limit, stop, symbol)
-            else:
-                order = self.create_order(side, qty, limit, stop, symbol)
-            self.orders[myid] = order
-
-    def entry(self, myid, side, qty, limit=None, stop=None, symbol=None):
-        """注文"""
-        symbol = symbol or self.settings.symbol
-
-        # 買いポジションがある場合、清算する
-        if side=='sell' and self.position.current_qty > 0:
-            qty = qty + self.position.current_qty
-
-        # 売りポジションがある場合、清算する
-        if side=='buy' and self.position.current_qty < 0:
-            qty = qty - self.position.current_qty
-
-        # 注文
         self.order(myid, side, qty, limit, stop, symbol)
 
+    @excahge_error
     def setup(self):
         # 取引所セットアップ
+        self.logger.info("Setup Exchange")
         if self.testnet.use:
             self.exchange = getattr(ccxt, self.settings.exchange)({
                 'apiKey': self.testnet.apiKey,
@@ -286,11 +326,18 @@ class Strategy:
                 })
         self.exchange.load_markets()
 
+        # 現在のポジションをすべて閉じる
+        self.logger.info("Cancel all orders and close position")
+        self.cancel_order_all()
+        self.close_position()
+
     def start(self):
         self.setup()
-        self.yourlogic.setup(self)
+        if isinstance(self.yourlogic, Trading):
+            self.yourlogic.setup(self)
 
-        next_fetch_ohlcv_time = None
+        self.logger.info("Start Trading")
+        fetch_ohlcv_nexttime = None
 
         while True:
             try:
@@ -298,31 +345,44 @@ class Strategy:
                 self.ticker = self.fetch_ticker()
 
                 # ポジション取得
-                #self.position = self.fetch_position()
+                self.position = self.fetch_position()
 
                 # 資金情報取得
-                #self.balance = self.fetch_balance()
+                self.balance = self.fetch_balance()
 
-                # 足取得（10経過後取得）
-                if next_fetch_ohlcv_time is None or datetime.utcnow() > next_fetch_ohlcv_time:
-                    self.df_ohlcv = self.fetch_ohlcv()
-                    timestamp = self.df_ohlcv['timestamp']
+                # 足取得（足確定後取得）
+                if fetch_ohlcv_nexttime is None or datetime.utcnow() > fetch_ohlcv_nexttime:
+                    self.ohlcv = self.fetch_ohlcv()
                     if self.settings.partial:
-                        next_fetch_ohlcv_time = None
+                        fetch_ohlcv_nexttime = None
                     else:
-                        next_fetch_ohlcv_time = timestamp[0] + (timestamp[0] - timestamp[1])
-                        next_fetch_ohlcv_time = next_fetch_ohlcv_time + timedelta(seconds=10)
+                        timestamp = self.ohlcv['timestamp']
+                        t0 = last(timestamp, 0).to_pydatetime() # 現在
+                        t1 = last(timestamp, 1).to_pydatetime() # 1つ前
+                        fetch_ohlcv_nexttime = t0 + (t0 - t1) + timedelta(seconds=3)
 
                 # メインロジックコール
                 arg = {
                     'strategy': self,
+                    'ticker': self.ticker,
+                    'ohlcv': self.ohlcv,
+                    'position': self.position,
+                    'balance': self.balance,
                 }
-                self.yourlogic.loop(**arg)
+                if isinstance(self.yourlogic, Trading):
+                    self.yourlogic.loop(**arg)
+                else:
+                    self.yourlogic(**arg)
 
-            except Exception as e:
-                print(e)
+            except (KeyboardInterrupt, SystemExit):
+                self.logger.info('Shutdown!')
                 break
+            except Exception as e:
+                self.logger.exception(e)
+
             sleep(self.settings.interval)
+
+        self.logger.info("Stop Trading")
 
         # 全注文キャンセル
         self.cancel_order_all()
