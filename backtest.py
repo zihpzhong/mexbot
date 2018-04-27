@@ -62,7 +62,10 @@ def Backtest(ohlc,
             if stop_buy_entry[i-1] > 0:
                 buyStopEntry = stop_buy_entry[i-1]
             if buyStopEntry > 0 and High[i] >= buyStopEntry:
-                OpenPrice = buyStopEntry
+                if Open[i] <= buyStopEntry:
+                    OpenPrice = buyStopEntry
+                else:
+                    OpenPrice = Open[i]
                 buyStopEntry = 0
             # 注文執行
             if OpenPrice > 0:
@@ -78,7 +81,10 @@ def Backtest(ohlc,
             if stop_buy_exit[i-1] > 0:
                 buyStopExit = stop_buy_exit[i-1]
             if buyStopExit > 0 and Low[i] <= buyStopExit:
-                ClosePrice = buyStopExit
+                if Open[i] >= buyStopExit:
+                    ClosePrice = buyStopExit
+                else:
+                    ClosePrice = Open[i]
                 buyStopExit = 0
             # 注文執行
             if ClosePrice > 0:
@@ -97,7 +103,10 @@ def Backtest(ohlc,
             if stop_sell_entry[i-1] > 0:
                 sellStopEntry = stop_sell_entry[i-1]
             if sellStopEntry > 0 and Low[i] <= sellStopEntry:
-                OpenPrice = sellStopEntry
+                if Open[i] >= sellStopEntry:
+                    OpenPrice = sellStopEntry
+                else:
+                    OpenPrice = Open[i]
                 sellStopEntry = 0
             # 注文執行
             if OpenPrice:
@@ -112,8 +121,11 @@ def Backtest(ohlc,
             # STOP注文
             if stop_sell_exit[i-1] > 0:
                 sellStopExit = stop_sell_exit[i-1]
-            if sellStopExit > 0 and High[i] > sellStopExit:
-                ClosePrice = sellStopExit
+            if sellStopExit > 0 and High[i] >= sellStopExit:
+                if Open[i] <= sellStopExit:
+                    ClosePrice = sellStopExit
+                else:
+                    ClosePrice = Open[i]
                 sellStopExit = 0
             # 注文執行
             if ClosePrice > 0:
