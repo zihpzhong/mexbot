@@ -7,8 +7,6 @@ import logging.config
 import ccxt
 import pandas as pd
 from utils import dotdict
-from indicator import *
-from settings import settings
 
 
 class Trading:
@@ -21,8 +19,7 @@ class Trading:
 def excahge_error(func):
     def wrapper(*args, **kwargs):
         self = args[0]
-        for retry in range(0, 10):
-            waitsec = 1
+        for retry in range(0, 30):
             try:
                 return func(*args, **kwargs)
             except ccxt.DDoSProtection as e:
@@ -39,7 +36,9 @@ def excahge_error(func):
                 break
             except ccxt.ExchangeError as e:
                 self.logger.warning(type(e).__name__ + ": {0}".format(e))
+                waitsec = 3
             sleep(waitsec)
+        raise Exception('Exchange Error Retry Timedout!!!')
     return wrapper
 
 class Strategy:
@@ -246,6 +245,34 @@ class Strategy:
     @excahge_error
     def order(self, myid, side, qty, limit=None, stop=None, trailing_offset=None, symbol=None):
         """注文"""
+
+        qty_total = qty
+        qty_limit = self.risk.max_position_size
+
+        # 買いポジあり
+        if self.position.qty > 0:
+            # 買い増し
+            if side == 'buy':
+                # 現在のポジ数を加算
+                qty_total = qty_total + self.position.qty
+            else:
+                # 反対売買の場合、ドテンできるように上限を引き上げる
+                qty_limit = qty_limit + self.position.qty
+
+        # 売りポジあり
+        if self.position.qty < 0:
+            # 売りまし
+            if side == 'sell':
+                # 現在のポジ数を加算
+                qty_total = qty_total + -self.position.qty
+            else:
+                # 反対売買の場合、ドテンできるように上限を引き上げる
+                qty_limit = qty_limit + -self.position.qty
+
+        # 購入数をポジション最大サイズに抑える
+        if qty_total > qty_limit:
+            qty = qty - (qty_total - qty_limit)
+
         if qty > 0:
             symbol = symbol or self.settings.symbol
 
@@ -280,37 +307,9 @@ class Strategy:
         if side=='buy' and self.position.qty < 0:
             qty = qty - self.position.qty
 
-        qty_total = qty
-        qty_limit = self.risk.max_position_size
-
-        # 買いポジあり
-        if self.position.qty > 0:
-            # 買い増し
-            if side == 'buy':
-                # 現在のポジ数を加算
-                qty_total = qty_total + self.position.qty
-            else:
-                # 反対売買の場合、ドテンできるように上限を引き上げる
-                qty_limit = qty_limit + self.position.qty
-
-        # 売りポジあり
-        if self.position.qty < 0:
-            # 売りまし
-            if side == 'sell':
-                # 現在のポジ数を加算
-                qty_total = qty_total + -self.position.qty
-            else:
-                # 反対売買の場合、ドテンできるように上限を引き上げる
-                qty_limit = qty_limit + -self.position.qty
-
-        # 購入数をポジション最大サイズに抑える
-        if qty_total > qty_limit:
-            qty = qty - (qty_total - qty_limit)
-
         # 注文
         self.order(myid, side, qty, limit, stop, symbol)
 
-    @excahge_error
     def setup(self):
         # 取引所セットアップ
         self.logger.info("Setup Exchange")
