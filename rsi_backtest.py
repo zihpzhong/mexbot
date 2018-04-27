@@ -7,14 +7,13 @@ from numba import jit
 from indicator import *
 
 # テストデータ読み込み
-data = pd.read_csv('csv/bitmex_20180420_1m.csv', index_col='timestamp', parse_dates=True)
+data = pd.read_csv('csv/bitmex_20180422_1m.csv', index_col='timestamp', parse_dates=True)
 
 @jit
 def rsi_backtest(ohlc, length, overBought, overSold, trailing_stop):
 
     # インジケーター作成
     vrsi = rsi(ohlc.close, length)
-    vrsi_last = vrsi.shift(1)
 
     # エントリー／イグジット
     long_entry = crossover(vrsi, overSold)
@@ -32,7 +31,7 @@ def rsi_backtest(ohlc, length, overBought, overSold, trailing_stop):
     short_entry[:length] = False
     short_exit[:length] = False
 
-    entry_exit = pd.DataFrame({'close':ohlc.close, 'rsi':vrsi, 'rsi-last':vrsi_last, 'long_entry':long_entry, 'long_exit':long_exit, 'short_entry':short_entry, 'short_exit':short_exit})
+    entry_exit = pd.DataFrame({'close':ohlc.close, 'rsi':vrsi, 'long_entry':long_entry, 'long_exit':long_exit, 'short_entry':short_entry, 'short_exit':short_exit})
     entry_exit.to_csv('entry_exit.csv')
 
     return Backtest(data, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit,
@@ -44,18 +43,18 @@ overBought = 78
 overSold = 30
 trailing_stop = 0
 
-report = rsi_backtest(data, length, overBought, overSold, trailing_stop)
-print(report)
-report.Raw.Trades.to_csv('trades.csv')
-report.Raw.PL.to_csv('pl.csv')
-report.Equity.to_csv('equity.csv')
-exit()
+# report = rsi_backtest(data, length, overBought, overSold, trailing_stop)
+# print(report)
+# report.Raw.Trades.to_csv('trades.csv')
+# report.Raw.PL.to_csv('pl.csv')
+# report.Equity.to_csv('equity.csv')
+# exit()
 
 def objective(args):
-    # length = int(args['length'])
-    # overBought = int(args['overBought'])
-    # overSold = int(args['overSold'])
-    trailing_stop = int(args['trailing_stop'])
+    length = int(args['length'])
+    overBought = int(args['overBought'])
+    overSold = int(args['overSold'])
+    #trailing_stop = int(args['trailing_stop'])
 
     # if overBought <= overSold:
     # 	return 10000
@@ -66,14 +65,14 @@ def objective(args):
 
 # 探索するパラメータ
 hyperopt_parameters = {
-#    'length': hp.quniform('length', 1, 30, 1),
-    # 'overBought': hp.quniform('overBought', 1, 99, 1),
-    # 'overSold': hp.quniform('overSold', 1, 99, 1),
-    'trailing_stop': hp.quniform('trailing_stop', 0, 99, 1),
+    'length': hp.quniform('length', 1, 30, 1),
+    'overBought': hp.quniform('overBought', 1, 99, 1),
+    'overSold': hp.quniform('overSold', 1, 99, 1),
+    # 'trailing_stop': hp.quniform('trailing_stop', 0, 99, 1),
 }
 
 # iterationする回数
-max_evals = 100
+max_evals = 1000
 
 # 試行の過程を記録するインスタンス
 trials = Trials()

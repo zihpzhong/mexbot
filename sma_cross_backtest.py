@@ -7,21 +7,21 @@ from numba import jit
 from indicator import *
 
 # テストデータ読み込み
-data = pd.read_csv('csv/bitmex_20180420_1m.csv', index_col='timestamp', parse_dates=True)
+data = pd.read_csv('csv/bitmex_20180417-18_5m.csv', index_col='timestamp', parse_dates=True)
+data2 = pd.read_csv('csv/bitmex_201804_1h.csv', index_col='timestamp', parse_dates=True)
 
 @jit
 def sma_cross_backtest(ohlc, fastlen, slowlen, trailing_stop):
 
     # インジケーター作成
-    vfast = sma(ohlc.close, fastlen)
-    vslow = sma(ohlc.close, slowlen)
-    vslow_last = vslow.shift(1)
+    vfast = sma(data2.close, fastlen)
+    vslow = sma(data2.close, slowlen)
 
     # エントリー／イグジット
-    long_entry = crossover(vfast, vslow)
-    long_exit = crossunder(vfast, vslow)
+    long_entry = pd.Series(vfast > vslow, index=ohlc.index)
+    short_entry = pd.Series(vfast < vslow, index=ohlc.index)
 
-    short_entry = long_exit
+    long_exit = short_entry
     short_exit = long_entry
 
     long_entry_price = None
@@ -49,9 +49,9 @@ def sma_cross_backtest(ohlc, fastlen, slowlen, trailing_stop):
         stop_buy_entry=long_entry_price, stop_sell_entry=short_entry_price, stop_buy_exit=long_exit_price, stop_sell_exit=short_exit_price,
         lots=1, spread=0, take_profit=0, stop_loss=0, trailing_stop=trailing_stop, slippage=0)
 
-fastlength = 19#9
-slowlength = 28#25
-trailing_stop = 10
+fastlength = 1
+slowlength = 3
+trailing_stop = 0
 
 report = sma_cross_backtest(data, fastlength, slowlength, trailing_stop)
 report.Raw.Trades.to_csv('trades.csv')
@@ -75,13 +75,13 @@ def objective(args):
 
 # 探索するパラメータ
 hyperopt_parameters = {
-    'fastlength': hp.quniform('fastlength', 1, 50, 1),
-    'slowlength': hp.quniform('slowlength', 1, 50, 1),
+    'fastlength': hp.quniform('fastlength', 1, 10, 1),
+    'slowlength': hp.quniform('slowlength', 1, 10, 1),
     # 'trailing_stop': hp.quniform('trailing_stop', 0, 20, 1),
 }
 
 # iterationする回数
-max_evals = 1000
+max_evals = 300
 
 # 試行の過程を記録するインスタンス
 trials = Trials()
