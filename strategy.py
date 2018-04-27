@@ -97,6 +97,7 @@ class Strategy:
         symbol = symbol or self.settings.symbol
         timeframe = timeframe or self.settings.timeframe
         ticker = dotdict(self.exchange.fetch_ticker(symbol, params={'binSize': self.exchange.timeframes[timeframe]}))
+        ticker.datetime = pd.to_datetime(ticker.datetime)
         self.logger.info("TICK: ohlc {open} {high} {low} {close} bid {bid} ask {ask}".format(**ticker))
         return ticker
 
@@ -351,7 +352,7 @@ class Strategy:
                 self.balance = self.fetch_balance()
 
                 # 足取得（足確定後取得）
-                if fetch_ohlcv_nexttime is None or datetime.utcnow() > fetch_ohlcv_nexttime:
+                if fetch_ohlcv_nexttime is None or self.ticker.datetime > fetch_ohlcv_nexttime:
                     self.ohlcv = self.fetch_ohlcv()
                     if self.settings.partial:
                         fetch_ohlcv_nexttime = None
@@ -359,7 +360,7 @@ class Strategy:
                         timestamp = self.ohlcv['timestamp']
                         t0 = last(timestamp, 0).to_pydatetime() # 現在
                         t1 = last(timestamp, 1).to_pydatetime() # 1つ前
-                        fetch_ohlcv_nexttime = t0 + (t0 - t1) + timedelta(seconds=3)
+                        fetch_ohlcv_nexttime = t0 + (t0 - t1) + timedelta(seconds=10)
 
                 # メインロジックコール
                 arg = {
