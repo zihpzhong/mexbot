@@ -132,6 +132,16 @@ def last(source, period=0):
     """
     return source.iat[-1-period]
 
+def pivothigh(source, leftbars, rightbars):
+    high = source.rolling(leftbars).max()
+    diff = high.diff().shift(rightbars)
+    return pd.Series(high[diff > 0], index=source.index)
+
+def pivotlow(source, leftbars, rightbars):
+    high = source.rolling(leftbars).min()
+    diff = high.diff().shift(rightbars)
+    return pd.Series(high[diff < 0], index=source.index)
+
 if __name__ == '__main__':
 
     # import numpy as np
@@ -156,8 +166,12 @@ if __name__ == '__main__':
     (vmacd, vsig) = macd(ohlc.close, 9, 26, 5)
     vtr = tr(ohlc.close, ohlc.high, ohlc.low)
     vatr = atr(ohlc.close, ohlc.high, ohlc.low, 14)
+    vpivoth = pivothigh(ohlc.high, 4, 2).ffill()
+    vpivotl = pivotlow(ohlc.low, 4, 2).ffill()
 
     df = pd.DataFrame({
+        'high':ohlc.high,
+        'low':ohlc.low,
         'close':ohlc.close,
         'sma':vsma,
         'ema':vema,
@@ -175,5 +189,7 @@ if __name__ == '__main__':
         'macd-signal':vsig,
         'tr':vtr,
         'atr':vatr,
+        'pivot high':vpivoth,
+        'pivot low':vpivotl,
         }, index=ohlc.index)
     print(df.to_csv())
