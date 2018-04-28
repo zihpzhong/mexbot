@@ -8,11 +8,7 @@ import logging.config
 leftbars = 1
 rightbars = 0
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
-    datefmt='%Y/%m/%d %H:%M:%S'
-)
+logging.config.fileConfig("logging.conf")
 
 def pivot_highlow_strategy(ticker, ohlcv, position, balance, strategy):
 
@@ -23,7 +19,7 @@ def pivot_highlow_strategy(ticker, ohlcv, position, balance, strategy):
 	# ロット数計算
     qty_lot = int(balance.BTC.free * 0.1 * ticker.last)
 
-    # ポジション最大値をロット数に制限
+    # 最大ポジション数設定
     strategy.risk.max_position_size = qty_lot
 
     # 注文（ポジションがある場合ドテン）
@@ -35,7 +31,7 @@ strategy.settings.timeframe = '1m'
 strategy.settings.interval = 5
 strategy.settings.apiKey = settings.apiKey
 strategy.settings.secret = settings.secret
-strategy.testnet.use = True
+strategy.testnet.use = False
 strategy.testnet.apiKey = settings.testnet_apiKey
 strategy.testnet.secret = settings.testnet_secret
 strategy.start()

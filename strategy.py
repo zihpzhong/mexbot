@@ -183,7 +183,6 @@ class Strategy:
         for r in res:
             self.logger.info("CANCEL: {orderID} {side} {orderQty} {price}".format(**r))
 
-    @excahge_error
     def create_order(self, side, qty, limit, stop, trailing_offset, symbol):
         type = 'market'
         params = {}
@@ -206,7 +205,6 @@ class Strategy:
         self.logger.info("ORDER: {orderID} {side} {orderQty} {price}({stopPx})".format(**res['info']))
         return dotdict(res)
 
-    @excahge_error
     def edit_order(self, id, side, qty, limit, stop, trailing_offset, symbol):
         type = 'market'
         params = {}
