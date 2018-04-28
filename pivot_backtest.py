@@ -7,7 +7,7 @@ from numba import jit
 from indicator import *
 
 # テストデータ読み込み
-data = pd.read_csv('csv/bitmex_20180415-16_5m.csv', index_col='timestamp', parse_dates=True)
+data = pd.read_csv('csv/bitmex_20180421-29_5m.csv', index_col='timestamp', parse_dates=True)
 #print(data.head())
 
 @jit
@@ -88,8 +88,8 @@ def objective(args):
 
 # 探索するパラメータ
 hyperopt_parameters = {
-    'leftbars': hp.quniform('leftbars', 1, 30, 1),
-    'rightbars': hp.quniform('rightbars', 0, 30, 1),
+    'leftbars': hp.quniform('leftbars', 1, 20, 1),
+    'rightbars': hp.quniform('rightbars', 0, 20, 1),
     # 'trailing_stop': hp.quniform('trailing_stop', 0, 100, 1),
 }
 
