@@ -16,12 +16,12 @@ position = dotdict()
 balance = dotdict()
 ticker = dotdict()
 
-lot_ratio_to_asset = 0.25
+lot_ratio_to_asset = 0.3
 qty_lot = 200
 profit_trigger = 80
 loss_trigger = -20
 trailing_offset = 10
-breakout_in = 24
+breakout_in = 22
 
 def fetch_ticker(symbol=settings.symbol, timeframe=settings.timeframe):
     ticker = dotdict(exchange.fetchTicker(symbol, params={'binSize': exchange.timeframes[timeframe]}))
@@ -312,9 +312,18 @@ if __name__ == "__main__":
             # ロット数計算
             qty_lot = bestlots()
 
+            # ポジション最大値をロット数に制限
+            settings.max_position_size = qty_lot
+
+            # 注文
+            if datetime.utcnow() > next_entry_time:
+                entry('L', 'buy', qty=qty_lot, limit=max(long_entry_price, ticker.bid), stop=long_entry_price+0.5)
+                entry('S', 'sell', qty=qty_lot, limit=min(short_entry_price, ticker.ask), stop=short_entry_price-0.5)
+
             # 利確/損切り
             if position.currentQty > 0:
                 next_entry_time = datetime.utcnow() + timedelta(minutes=5)
+                interval = 3
 
                 if ticker.ask > trailing_stop or trailing_stop == 0:
                     trailing_stop = ticker.ask
@@ -323,6 +332,7 @@ if __name__ == "__main__":
                     order('L_exit', side='sell', qty=position.currentQty, limit=ticker.ask)
             elif position.currentQty < 0:
                 next_entry_time = datetime.utcnow() + timedelta(minutes=5)
+                interval = 3
 
                 if ticker.bid < trailing_stop or trailing_stop == 0:
                     trailing_stop = ticker.bid
@@ -334,10 +344,6 @@ if __name__ == "__main__":
                 trailing_stop = 0
                 cancel('L_exit')
                 cancel('S_exit')
-                # 注文
-                if datetime.utcnow() > next_entry_time:
-                    entry('L', 'buy', qty=qty_lot, limit=long_entry_price, stop=long_entry_price+0.5)
-                    entry('S', 'sell', qty=qty_lot, limit=short_entry_price, stop=short_entry_price-0.5)
 
         except ccxt.DDoSProtection as e:
             logging.warning(type(e).__name__ + ": {0}".format(e))

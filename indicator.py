@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 
-# index 0 が最新値、1が1つ前、-1 が最古値であることに注意
-
 def sma(source, period):
     return source.rolling(period).mean()
 
