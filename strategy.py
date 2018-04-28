@@ -7,7 +7,7 @@ import logging.config
 import ccxt
 import pandas as pd
 from utils import dotdict
-
+from indicator import last
 
 class Trading:
     def setup(self, strategy):
@@ -51,7 +51,7 @@ class Strategy:
         self.settings = dotdict()
         self.settings.exchange = 'bitmex'
         self.settings.symbol = 'BTC/USD'
-        self.settings.api_key = ''
+        self.settings.apiKey = ''
         self.settings.secret = ''
 
         # 動作タイミング
@@ -74,8 +74,7 @@ class Strategy:
 
         # ポジション情報
         self.position = dotdict()
-        self.position.qty = 0
-        self.position.avg_price = 0
+        self.position.currentQty = 0
 
         # 注文情報
         self.orders = dotdict()
@@ -88,7 +87,6 @@ class Strategy:
 
         # ログ設定
         self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.INFO)
 
 
     @excahge_error
@@ -135,29 +133,15 @@ class Strategy:
         if len(pos):
             pos = dotdict(pos[0])
             pos.timestamp = pd.to_datetime(pos.timestamp)
-            if pos.avgCostPrice is not None:
-                current_cost = pos.currentQty / pos.avgCostPrice
-                if pos.currentQty > 0:
-                    unrealized_cost = pos.currentQty / ticker.ask
-                    pos.profit_and_loss = int((current_cost - unrealized_cost) * 100000000)
-                    pos.profit_and_loss_pct = ((current_cost / unrealized_cost) * 100) - 100
-                else:
-                    unrealized_cost = pos.currentQty / ticker.bid
-                    pos.profit_and_loss = int((current_cost - unrealized_cost) * 100000000)
-                    pos.profit_and_loss_pct = 100 - ((current_cost / unrealized_cost) * 100)
-            else:
-                pos.profit_and_loss = 0
-                pos.profit_and_loss_pct = 0
         else:
             pos = dotdict()
             pos.currentQty = 0
             pos.avgCostPrice = 0
-            pos.profit_and_loss = 0
-            pos.profit_and_loss_pct = 0
+            pos.unrealisedPnl = 0
+            pos.unrealisedPnlPcnt = 0
             pos.realisedPnl = 0
-        self.position.qty = pos.currentQty
-        self.position.avg_price = pos.avgCostPrice
-        self.logger.info("POSITION: qty {qty} cost {avg_price} pnl {profit_and_loss}({profit_and_loss_pct:.2f}%) {realisedPnl}".format(**pos))
+        pos.unrealisedPnlPcnt100 = pos.unrealisedPnlPcnt * 100
+        self.logger.info("POSITION: qty {currentQty} cost {avgCostPrice} pnl {unrealisedPnl}({unrealisedPnlPcnt100:.2f}%) {realisedPnl}".format(**pos))
         return pos
 
     @excahge_error
@@ -250,24 +234,24 @@ class Strategy:
         qty_limit = self.risk.max_position_size
 
         # 買いポジあり
-        if self.position.qty > 0:
+        if self.position.currentQty > 0:
             # 買い増し
             if side == 'buy':
                 # 現在のポジ数を加算
-                qty_total = qty_total + self.position.qty
+                qty_total = qty_total + self.position.currentQty
             else:
                 # 反対売買の場合、ドテンできるように上限を引き上げる
-                qty_limit = qty_limit + self.position.qty
+                qty_limit = qty_limit + self.position.currentQty
 
         # 売りポジあり
-        if self.position.qty < 0:
+        if self.position.currentQty < 0:
             # 売りまし
             if side == 'sell':
                 # 現在のポジ数を加算
-                qty_total = qty_total + -self.position.qty
+                qty_total = qty_total + -self.position.currentQty
             else:
                 # 反対売買の場合、ドテンできるように上限を引き上げる
-                qty_limit = qty_limit + -self.position.qty
+                qty_limit = qty_limit + -self.position.currentQty
 
         # 購入数をポジション最大サイズに抑える
         if qty_total > qty_limit:
@@ -300,12 +284,12 @@ class Strategy:
         """注文"""
 
         # 買いポジションがある場合、清算する
-        if side=='sell' and self.position.qty > 0:
-            qty = qty + self.position.qty
+        if side=='sell' and self.position.currentQty > 0:
+            qty = qty + self.position.currentQty
 
         # 売りポジションがある場合、清算する
-        if side=='buy' and self.position.qty < 0:
-            qty = qty - self.position.qty
+        if side=='buy' and self.position.currentQty < 0:
+            qty = qty - self.position.currentQty
 
         # 注文
         self.order(myid, side, qty, limit, stop, symbol)
@@ -374,13 +358,13 @@ class Strategy:
                 else:
                     self.yourlogic(**arg)
 
+                sleep(self.settings.interval)
+
             except (KeyboardInterrupt, SystemExit):
                 self.logger.info('Shutdown!')
                 break
             except Exception as e:
                 self.logger.exception(e)
-
-            sleep(self.settings.interval)
 
         self.logger.info("Stop Trading")
 
