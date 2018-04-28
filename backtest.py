@@ -33,15 +33,15 @@ def Backtest(ohlc,
     buy_exit = place_holder if buy_exit is None else buy_exit.values
     sell_exit = place_holder if sell_exit is None else sell_exit.values
 
-    stop_buy_entry = place_holder if stop_buy_entry is None else stop_buy_entry.values
-    stop_sell_entry = place_holder if stop_sell_entry is None else stop_sell_entry.values
-    stop_buy_exit = place_holder if stop_buy_exit is None else stop_buy_exit.values
-    stop_sell_exit = place_holder if stop_sell_exit is None else stop_sell_exit.values
-
     # トレーリングストップ価格を設定(STOP注文として処理する)
     if trailing_stop > 0:
         stop_buy_exit = ohlc.high - trailing_stop
         stop_sell_exit = ohlc.low + trailing_stop
+
+    stop_buy_entry = place_holder if stop_buy_entry is None else stop_buy_entry.values
+    stop_sell_entry = place_holder if stop_sell_entry is None else stop_sell_entry.values
+    stop_buy_exit = place_holder if stop_buy_exit is None else stop_buy_exit.values
+    stop_sell_exit = place_holder if stop_sell_exit is None else stop_sell_exit.values
 
     #
     # 1.シグナルが出た次の足の始値で成行
