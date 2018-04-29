@@ -132,13 +132,15 @@ def last(source, period=0):
 
 def pivothigh(source, leftbars, rightbars):
     high = source.rolling(leftbars).max()
-    diff = high.diff().shift(rightbars)
-    return pd.Series(high[diff >= 0], index=source.index)
+    diff = high.diff()
+    pvhi = pd.Series(high[diff >= 0], index=source.index)
+    return pvhi.shift(rightbars) if rightbars > 0 else pvhi
 
 def pivotlow(source, leftbars, rightbars):
     low = source.rolling(leftbars).min()
-    diff = low.diff().shift(rightbars)
-    return pd.Series(low[diff <= 0], index=source.index)
+    diff = low.diff()
+    pvlo = pd.Series(low[diff <= 0], index=source.index)
+    return pvlo.shift(rightbars) if rightbars > 0 else pvlo
 
 if __name__ == '__main__':
 
