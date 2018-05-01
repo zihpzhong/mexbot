@@ -9,6 +9,7 @@ leftbars = 1
 rightbars = 0
 
 logging.config.fileConfig("logging.conf")
+logger = logging.getLogger("PvtHLBot")
 
 def pivot_highlow_strategy(ticker, ohlcv, position, balance, strategy):
 

@@ -263,15 +263,20 @@ class Strategy:
                 order_id = self.orders[myid].id
                 order = dotdict(self.exchange.fetch_order(order_id))
                 # Todo
-                # 1.部分利確の確認
-                # 2.指値STOP注文の場合、トリガーされたかの確認
-                # どちらの場合もキャンセル必要と思う
+                # 1.部分約定の確認
                 if order.status == 'open':
-                    if order.type == 'stoplimit' and order.info['triggered'] == 'StopOrderTriggered':
+                    # オーダータイプが異なる or STOP注文がトリガーされたら編集に失敗するのでキャンセルしてから新規注文する
+                    order_type = 'stop' if stop is not None else ''
+                    order_type = order_type + 'limit' if limit is not None else order_type
+                    if (order_type != order.type) or (order.type == 'stoplimit' and order.info['triggered'] == 'StopOrderTriggered'):
                         order = self.exchange.cancel_order(order_id)
                         order = self.create_order(side, qty, limit, stop, trailing_offset, symbol)
                     else:
-                        order = self.edit_order(order_id, side, qty, limit, stop, trailing_offset, symbol)
+                        # 指値・ストップ価格・数量に変更がある場合のみ編集を行う
+                        if ((order.info['price'] is not None and order.info['price'] != limit) or
+                            (order.info['stopPx'] is not None and order.info['stopPx'] != stop) or
+                            (order.info['orderQty'] is not None and order.info['orderQty'] != qty)):
+                            order = self.edit_order(order_id, side, qty, limit, stop, trailing_offset, symbol)
                 else:
                     order = self.create_order(side, qty, limit, stop, trailing_offset, symbol)
             else:
