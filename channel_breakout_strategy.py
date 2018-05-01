@@ -319,26 +319,27 @@ if __name__ == "__main__":
             if datetime.utcnow() > next_entry_time:
                 entry('L', 'buy', qty=qty_lot, limit=max(long_entry_price, ticker.bid), stop=long_entry_price+0.5)
                 entry('S', 'sell', qty=qty_lot, limit=min(short_entry_price, ticker.ask), stop=short_entry_price-0.5)
+            else:
+                cancel('S')
+                cancel('L')
 
             # 利確/損切り
             if position.currentQty > 0:
                 next_entry_time = datetime.utcnow() + timedelta(minutes=5)
-                interval = 3
-
                 if ticker.ask > trailing_stop or trailing_stop == 0:
                     trailing_stop = ticker.ask
 
                 if ticker.ask <= (trailing_stop - trailing_offset):
                     order('L_exit', side='sell', qty=position.currentQty, limit=ticker.ask)
+                    interval = 3
             elif position.currentQty < 0:
                 next_entry_time = datetime.utcnow() + timedelta(minutes=5)
-                interval = 3
-
                 if ticker.bid < trailing_stop or trailing_stop == 0:
                     trailing_stop = ticker.bid
 
                 if ticker.bid >= (trailing_stop + trailing_offset):
                     order('S_exit', side='buy', qty=-position.currentQty, limit=ticker.bid)
+                    interval = 3
             else:
                 # 利確/損切り 注文キャンセル
                 trailing_stop = 0
