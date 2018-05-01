@@ -84,6 +84,7 @@ class Strategy:
 
         # ohlcv情報
         self.ohlcv = None
+        self.ohlcv_updated = False
 
         # ログ設定
         self.logger = logging.getLogger(__name__)
@@ -292,6 +293,24 @@ class Strategy:
         # 注文
         self.order(myid, side, qty, limit, stop, symbol)
 
+    def update_ohlcv(self, ticker_time=None, force_update=False):
+        if self.settings.partial or force_update:
+            self.ohlcv = self.fetch_ohlcv()
+            self.ohlcv_updated = True
+        else:
+            # 次に足取得する時間
+            timestamp = self.ohlcv['timestamp']
+            t0 = last(timestamp, 0)
+            t1 = last(timestamp, 1)
+            next_fetch_time = t0 + (t0 - t1)
+            # 足取得
+            if ticker_time > next_fetch_time:
+                self.ohlcv = self.fetch_ohlcv()
+                # 更新確認
+                timestamp = self.ohlcv['timestamp']
+                if last(timestamp, 0) >= next_fetch_time:
+                    self.ohlcv_updated = True
+
     def setup(self):
         # 取引所セットアップ
         self.logger.info("Setup Exchange")
@@ -319,9 +338,13 @@ class Strategy:
             self.yourlogic.setup(self)
 
         self.logger.info("Start Trading")
-        fetch_ohlcv_nexttime = None
+
+        # 強制足取得
+        self.update_ohlcv(force_update=True)
 
         while True:
+            self.interval = self.settings.interval
+
             try:
                 # ティッカー取得
                 self.ticker = self.fetch_ticker()
@@ -333,15 +356,7 @@ class Strategy:
                 self.balance = self.fetch_balance()
 
                 # 足取得（足確定後取得）
-                if fetch_ohlcv_nexttime is None or self.ticker.datetime > fetch_ohlcv_nexttime:
-                    self.ohlcv = self.fetch_ohlcv()
-                    if self.settings.partial:
-                        fetch_ohlcv_nexttime = None
-                    else:
-                        timestamp = self.ohlcv['timestamp']
-                        t0 = last(timestamp, 0).to_pydatetime() # 現在
-                        t1 = last(timestamp, 1).to_pydatetime() # 1つ前
-                        fetch_ohlcv_nexttime = t0 + (t0 - t1) + timedelta(seconds=10)
+                self.update_ohlcv(ticker_time=self.ticker.datetime)
 
                 # メインロジックコール
                 arg = {
@@ -356,7 +371,7 @@ class Strategy:
                 else:
                     self.yourlogic(**arg)
 
-                sleep(self.settings.interval)
+                sleep(self.interval)
 
             except (KeyboardInterrupt, SystemExit):
                 self.logger.info('Shutdown!')
