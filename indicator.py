@@ -5,8 +5,8 @@ def sma(source, period):
     return source.rolling(period).mean()
 
 def ema(source, period):
-    alpha = 2.0 / (period + 1)
-    return source.ewm(alpha=alpha).mean()
+    # alpha = 2.0 / (period + 1)
+    return source.ewm(span=period).mean()
 
 def rma(source, period):
     alpha = 1.0 / (period)
@@ -47,7 +47,7 @@ def bband(source, period, mult=2):
 def macd(source, fastlen, slowlen, siglen):
     macd = source.ewm(span=fastlen).mean() - source.ewm(span=slowlen).mean()
     signal = macd.rolling(siglen).mean()
-    return (macd, signal)
+    return (macd, signal, macd-signal)
 
 def hlband(source, period):
     high = source.rolling(period).max()
