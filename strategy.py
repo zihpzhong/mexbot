@@ -42,6 +42,19 @@ def excahge_error(func):
     return wrapper
 
 class Strategy:
+    resampleInfo = {
+         '1m': { 'binSize' : '1m', 'resample': False, 'count': 100, 'delta':timedelta(minutes=1)  },
+         '3m': { 'binSize' : '1m', 'resample': True,  'count': 120, 'delta':timedelta(minutes=1)  },
+         '5m': { 'binSize' : '5m', 'resample': False, 'count': 100, 'delta':timedelta(minutes=5)  },
+        '15m': { 'binSize' : '5m', 'resample': True,  'count': 120, 'delta':timedelta(minutes=5) },
+        '30m': { 'binSize' : '5m', 'resample': True,  'count': 120, 'delta':timedelta(minutes=5) },
+        '45m': { 'binSize' : '5m', 'resample': True,  'count': 120, 'delta':timedelta(minutes=5) },
+         '1h': { 'binSize' : '1h', 'resample': False, 'count': 100, 'delta':timedelta(hours=1)    },
+         '2h': { 'binSize' : '1h', 'resample': True,  'count': 100, 'delta':timedelta(hours=1)    },
+         '4h': { 'binSize' : '1h', 'resample': True,  'count': 100, 'delta':timedelta(hours=1)    },
+         '1d': { 'binSize' : '1d', 'resample': False, 'count': 100, 'delta':timedelta(days=1)     },
+    }
+
     def __init__(self, yourlogic, interval=60):
 
         # トレーディングロジック設定
@@ -94,7 +107,7 @@ class Strategy:
     def fetch_ticker(self, symbol=None, timeframe=None):
         symbol = symbol or self.settings.symbol
         timeframe = timeframe or self.settings.timeframe
-        ticker = dotdict(self.exchange.fetch_ticker(symbol, params={'binSize': self.exchange.timeframes[timeframe]}))
+        ticker = dotdict(self.exchange.fetch_ticker(symbol, params={'binSize': self.resampleInfo[timeframe]['binSize']}))
         ticker.datetime = pd.to_datetime(ticker.datetime)
         self.logger.info("TICK: ohlc {open} {high} {low} {close} bid {bid} ask {ask}".format(**ticker))
         return ticker
@@ -105,23 +118,25 @@ class Strategy:
         symbol = symbol or self.settings.symbol
         timeframe = timeframe or self.settings.timeframe
         partial = 'true' if self.settings.partial else 'false'
-        start_time_offset = {
-            '1m': timedelta(minutes=1*100),
-            '5m': timedelta(minutes=5*100),
-            '1h': timedelta(hours=1*100),
-            '1d': timedelta(days=1*100),
-        }
+        rsinf = self.resampleInfo[timeframe]
         market = self.exchange.market(symbol)
         req = {
             'symbol': market['id'],
-            'binSize': self.exchange.timeframes[timeframe],
+            'binSize': rsinf['binSize'],
+            'count': rsinf['count'],
             'partial': partial,     # True == include yet-incomplete current bins
             'reverse': 'false',
-            'startTime': datetime.utcnow() - start_time_offset[timeframe],
+            'startTime': datetime.utcnow() - (rsinf['delta'] * rsinf['count']),
         }
         res = self.exchange.publicGetTradeBucketed(req)
         df = pd.DataFrame(res)
         df['timestamp'] = pd.to_datetime(df['timestamp'])
+        df.set_index('timestamp', inplace=True)
+        if rsinf['resample']:
+            rule = timeframe
+            rule = rule.replace('m','T')
+            rule = rule.replace('d','D')
+            df = df.resample(rule=rule, closed='right').agg({'open':'first','high':'max','low':'min','close':'last','volume':'sum'})
         self.logger.info("OHLCV: {open} {high} {low} {close} {volume}".format(**df.iloc[-1]))
         return df
 
@@ -304,16 +319,16 @@ class Strategy:
             self.ohlcv_updated = True
         else:
             # 次に足取得する時間
-            timestamp = self.ohlcv['timestamp']
-            t0 = last(timestamp, 0)
-            t1 = last(timestamp, 1)
+            timestamp = self.ohlcv.index
+            t0 = timestamp[-1]
+            t1 = timestamp[-2]
             next_fetch_time = t0 + (t0 - t1)
             # 足取得
             if ticker_time > next_fetch_time:
                 self.ohlcv = self.fetch_ohlcv()
                 # 更新確認
-                timestamp = self.ohlcv['timestamp']
-                if last(timestamp, 0) >= next_fetch_time:
+                timestamp = self.ohlcv.index
+                if timestamp[-1] >= next_fetch_time:
                     self.ohlcv_updated = True
 
     def setup(self):
