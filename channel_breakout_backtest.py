@@ -7,7 +7,7 @@ from numba import jit
 from indicator import *
 
 # テストデータ読み込み
-data = pd.read_csv('csv/bitmex_201804_1h.csv', index_col='timestamp', parse_dates=True)
+data = pd.read_csv('csv/bitmex_20180401-5m.csv', index_col='timestamp', parse_dates=True)
 #print(data.head())
 
 @jit
@@ -15,18 +15,22 @@ def channel_breakout_backtest(ohlc, breakout_in, breakout_out, offset = 1, take_
 
     ignore = max(breakout_in, breakout_out) + offset
 
-    # HLバンド
-    long_entry_price = highest(ohlc.high, breakout_in).shift(offset)
-    long_exit_price = lowest(ohlc.low, breakout_out).shift(offset)
+    long_entry_price = highest(ohlc.high, breakout_in).shift(offset) + 0.5
+    long_exit_price = lowest(ohlc.low, breakout_out).shift(offset) - 0.5
 
-    short_entry_price = lowest(ohlc.low, breakout_in).shift(offset)
-    short_exit_price = highest(ohlc.high, breakout_out).shift(offset)
+    short_entry_price = lowest(ohlc.low, breakout_in).shift(offset) - 0.5
+    short_exit_price = highest(ohlc.high, breakout_out).shift(offset) + 0.5
 
     long_entry_price[:ignore] = 0
     long_exit_price[:ignore] = 0
 
     short_entry_price[:ignore] = 0
     short_exit_price[:ignore] = 0
+
+    sma_filter = sma(ohlc.close, 25)
+
+    long_entry_price[ohlc.close > sma_filter] = 0
+    short_entry_price[ohlc.close < sma_filter] = 0
 
     long_entry = ohlc.close > long_entry_price
     long_exit = ohlc.close < long_exit_price
@@ -61,21 +65,21 @@ def channel_breakout_backtest(ohlc, breakout_in, breakout_out, offset = 1, take_
 
     return Backtest(data, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit,
         stop_buy_entry=long_entry_price, stop_sell_entry=short_entry_price, stop_buy_exit=long_exit_price, stop_sell_exit=short_exit_price,
-        lots=1, spread=6, take_profit=take_profit, stop_loss=stop_loss, trailing_stop=trailing_stop, slippage=0)
+        lots=1, spread=0, take_profit=take_profit, stop_loss=stop_loss, trailing_stop=trailing_stop, slippage=0)
 
-breakout_in = 18
-breakout_out = 18
-offset = 3
+breakout_in = 22
+breakout_out = 5
+offset = 0
 take_profit = 0
 stop_loss = 0
 trailing_stop = 0
 
-# report = channel_breakout_backtest(data, breakout_in, breakout_out, offset, take_profit, stop_loss, trailing_stop)
-# report.Raw.Trades.to_csv('trades.csv')
-# report.Raw.PL.to_csv('pl.csv')
-# report.Equity.to_csv('equity.csv')
-# print(report)
-# exit()
+report = channel_breakout_backtest(data, breakout_in, breakout_out, offset, take_profit, stop_loss, trailing_stop)
+report.Raw.Trades.to_csv('trades.csv')
+report.Raw.PL.to_csv('pl.csv')
+report.Equity.to_csv('equity.csv')
+print(report)
+exit()
 
 # 参考
 # https://qiita.com/kenchin110100/items/ac3edb480d789481f134
@@ -84,7 +88,7 @@ def objective(args):
     global take_profit, stop_loss, breakout_in, breakout_out
     breakout_in = int(args['breakout_in'])
     breakout_out = int(args['breakout_out'])
-    offset = int(args['offset'])
+    # offset = int(args['offset'])
     # take_profit = int(args['take_profit'])
     # stop_loss = int(args['stop_loss'])
     # trailing_stop = int(args['trailing_stop'])
@@ -100,14 +104,14 @@ def objective(args):
 hyperopt_parameters = {
     'breakout_in': hp.quniform('breakout_in', 1, 30, 1),
     'breakout_out': hp.quniform('breakout_out', 1, 30, 1),
-    'offset': hp.quniform('offset', 0, 15, 1),
+    # 'offset': hp.quniform('offset', 0, 15, 1),
     # 'take_profit': hp.quniform('take_profit', 0, 100, 5),
     # 'stop_loss': hp.quniform('stop_loss', 0, 40, 2),
     # 'trailing_stop': hp.quniform('trailing_stop', 0, 100, 1),
 }
 
 # iterationする回数
-max_evals = 1000
+max_evals = 500
 
 # 試行の過程を記録するインスタンス
 trials = Trials()

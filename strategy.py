@@ -165,7 +165,7 @@ class Strategy:
         """資産情報取得"""
         balance = dotdict(self.exchange.fetch_balance())
         balance.BTC = dotdict(balance.BTC)
-        self.logger.info("BALANCE: free {free} used {used} total {total}".format(**balance.BTC))
+        self.logger.info("BALANCE: free {free:.3f} used {used:.3f} total {total:.3f}".format(**balance.BTC))
         return balance
 
     @excahge_error

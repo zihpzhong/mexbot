@@ -14,20 +14,19 @@ lot_ratio_to_asset = 0.3
 
 # ブレイクアウトエントリー期間
 breakout_in = 22
-
-# トレールストップ価格
-trailing_stop = 0
-trailing_offset = 10
-
-# 次にエントリーする時間
-next_entry_time = datetime.utcnow()
+breakout_out = 6
 
 def channel_breakout_strategy(ticker, ohlcv, position, balance, strategy):
-    global next_entry_time, trailing_stop
 
     # エントリー/エグジット
-    long_entry_price = last(highest(ohlcv.high, breakout_in))
-    short_entry_price = last(lowest(ohlcv.low, breakout_in))
+    long_entry_price = last(highest(ohlcv.high, breakout_in)) + 0.5
+    short_entry_price = last(lowest(ohlcv.low, breakout_in)) - 0.5
+
+    long_exit_price = last(lowest(ohlcv.low, breakout_out)) - 0.5
+    short_exit_price = last(highest(ohlcv.high, breakout_out)) + 0.5
+
+    sma_filter = last(sma(ohlcv.close, 25))
+    close = last(ohlcv.close)
 
     # ロット数計算
     qty_lot = int(balance.BTC.free * lot_ratio_to_asset * ticker.last)
@@ -37,37 +36,25 @@ def channel_breakout_strategy(ticker, ohlcv, position, balance, strategy):
     strategy.risk.max_position_size = qty_lot
 
     # 注文
-    if datetime.utcnow() > next_entry_time:
-        strategy.entry('L', 'buy', qty=qty_lot, limit=max(long_entry_price, ticker.bid), stop=long_entry_price+0.5)
-        strategy.entry('S', 'sell', qty=qty_lot, limit=min(short_entry_price, ticker.ask), stop=short_entry_price-0.5)
-    else:
-        strategy.cancel('S')
-        strategy.cancel('L')
-
-    # 利確/損切り
     if position.currentQty > 0:
-        next_entry_time = datetime.utcnow() + timedelta(minutes=5)
-        if ticker.ask > trailing_stop or trailing_stop == 0:
-            trailing_stop = ticker.ask
-
-        if ticker.ask <= (trailing_stop - trailing_offset):
-            strategy.order('L_exit', side='sell', qty=position.currentQty, limit=ticker.ask)
-            strategy.interval = 3
-
+        strategy.order('L_exit', side='sell', qty=position.currentQty, limit=min(long_exit_price, ticker.ask), stop=long_exit_price)
+        strategy.ohlcv_updated = False
     elif position.currentQty < 0:
-        next_entry_time = datetime.utcnow() + timedelta(minutes=5)
-        if ticker.bid < trailing_stop or trailing_stop == 0:
-            trailing_stop = ticker.bid
-
-        if ticker.bid >= (trailing_stop + trailing_offset):
-            strategy.order('S_exit', side='buy', qty=-position.currentQty, limit=ticker.bid)
-            strategy.interval = 3
-
+        strategy.order('S_exit', side='buy', qty=-position.currentQty, limit=max(short_exit_price, ticker.bid), stop=short_exit_price)
+        strategy.ohlcv_updated = False
     else:
-        # 利確/損切り注文キャンセル
-        trailing_stop = 0
-        strategy.cancel('L_exit')
-        strategy.cancel('S_exit')
+        if strategy.ohlcv_updated:
+            if close > sma_filter:
+                logger.info("Filter: " + str(close) + " > " + str(sma_filter))
+                strategy.order('L', 'buy', qty=qty_lot, limit=max(long_entry_price, ticker.bid), stop=long_entry_price)
+                strategy.cancel('S')
+            if close < sma_filter:
+                logger.info("Filter: " + str(close) + " < " + str(sma_filter))
+                strategy.order('S', 'sell', qty=qty_lot, limit=min(short_entry_price, ticker.ask), stop=short_entry_price)
+                strategy.cancel('L')
+        else:
+            logger.info("Waiting for OHLCV update...")
+
 
 strategy = Strategy(channel_breakout_strategy)
 strategy.settings.timeframe = '5m'
