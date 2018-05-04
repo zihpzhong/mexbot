@@ -9,8 +9,8 @@ import logging.config
 logging.config.fileConfig("logging.conf")
 logger = logging.getLogger("BBandBot")
 
-length = 9
-multi = 0.5
+length = 20
+multi = 2
 
 def bband_strategy(ticker, ohlcv, position, balance, strategy):
 
@@ -43,11 +43,11 @@ def bband_strategy(ticker, ohlcv, position, balance, strategy):
     	strategy.cancel('S')
 
 strategy = Strategy(bband_strategy)
-strategy.settings.timeframe = '1m'
-strategy.settings.interval = 5
+strategy.settings.timeframe = '15m'
+strategy.settings.interval = 30
 strategy.settings.apiKey = settings.apiKey
 strategy.settings.secret = settings.secret
-strategy.testnet.use = True
+strategy.testnet.use = False
 strategy.testnet.apiKey = settings.testnet_apiKey
 strategy.testnet.secret = settings.testnet_secret
 strategy.start()
