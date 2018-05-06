@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
+import numpy as np
 
 def sma(source, period):
     return source.rolling(period).mean()
@@ -142,6 +143,52 @@ def pivotlow(source, leftbars, rightbars):
     pvlo = pd.Series(low[diff <= 0], index=source.index)
     return pvlo.shift(rightbars) if rightbars > 0 else pvlo
 
+def sar(high, low, start, inc, max):
+    index = high.index
+    high = high.values
+    low = low.values
+    n = len(high)
+    sar = np.zeros(n)
+    sar[0] = low[0]
+    ep = high[0]
+    acc = start
+    long = True
+    for i in range(1, n):
+        if long:
+            sar[i] = sar[i-1] + acc * (ep - sar[i-1])
+            if high[i] > ep:
+                ep = high[i]
+                if acc < max:
+                    acc += inc
+            if sar[i] > low[i]:
+                long = False
+                acc = start
+                sar[i] = ep
+        else:
+            sar[i] = sar[i-1] + acc * (ep - sar[i-1])
+            if low[i] < ep:
+                ep = low[i]
+                if acc < max:
+                    acc += inc
+            if sar[i] < high[i]:
+                long = True
+                acc = start
+                sar[i] = ep
+    return pd.Series(sar, index=index)
+
+def minimamu(a, b, period):
+    c = a.copy()
+    sel = a > b
+    c[sel] = b[sel]
+    return c.rolling(period).min()
+
+def maximum(a, b, period):
+    c = a.copy()
+    sel = a < b
+    c[sel] = b[sel]
+    return c.rolling(period).max()
+
+
 if __name__ == '__main__':
 
     # import numpy as np
@@ -153,7 +200,7 @@ if __name__ == '__main__':
     # gwalk = np.cumprod(np.exp(scale*dn))*p0
     # data = pd.Series(gwalk)
 
-    ohlc = pd.read_csv('csv/bitmex_20180419_1m.csv', index_col='timestamp', parse_dates=True)
+    ohlc = pd.read_csv('csv/bitmex_20180428_1m.csv', index_col='timestamp', parse_dates=True)
 
     vsma = sma(ohlc.close, 10)
     vema = ema(ohlc.close, 10)
@@ -163,12 +210,14 @@ if __name__ == '__main__':
     (vwvf, lowerBand, upperBand, rangeHigh, rangeLow) = wvf(ohlc.close, ohlc.low)
     vhighest = highest(ohlc.high, 14)
     vlowest = lowest(ohlc.low, 14)
-    (vmacd, vsig) = macd(ohlc.close, 9, 26, 5)
+    (vmacd, vsig, vhist) = macd(ohlc.close, 9, 26, 5)
     vtr = tr(ohlc.close, ohlc.high, ohlc.low)
     vatr = atr(ohlc.close, ohlc.high, ohlc.low, 14)
     vpivoth = pivothigh(ohlc.high, 4, 2).ffill()
     vpivotl = pivotlow(ohlc.low, 4, 2).ffill()
-
+    vsar = sar(ohlc.high, ohlc.low, 0.02, 0.02, 0.2)
+    vmin = minimamu(ohlc.open, ohlc.close, 14)
+    vmax = maximum(ohlc.open, ohlc.close, 14)
     df = pd.DataFrame({
         'high':ohlc.high,
         'low':ohlc.low,
@@ -191,5 +240,8 @@ if __name__ == '__main__':
         'atr':vatr,
         'pivot high':vpivoth,
         'pivot low':vpivotl,
+        'sar':vsar,
+        'min':vmin,
+        'max':vmax,
         }, index=ohlc.index)
     print(df.to_csv())
