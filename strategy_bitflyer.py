@@ -161,9 +161,12 @@ class StrategyBitflyer:
         params = {}
         if limit is not None:
             type = 'limit'
-        res = self.exchange.create_order(symbol, type, side, qty, limit, params)
-        self.logger.info("ORDER: {id}".format(**res))
-        return dotdict(res)
+        res = dotdict(self.exchange.create_order(symbol, type, side, qty, limit, params))
+        res.side = side
+        res.size = qty if side == 'buy' else qty * -1
+        res.price = limit
+        self.logger.info("ORDER: {id} {side} {size} {price}".format(**res))
+        return res
 
     @excahge_error
     def order(self, myid, side, qty, limit=None, stop=None, trailing_offset=None, symbol=None):
@@ -198,12 +201,9 @@ class StrategyBitflyer:
 
         if qty > 0:
             symbol = symbol or self.settings.symbol
-
             if myid in self.orders:
                 order_id = self.orders[myid].id
                 order = dotdict(self.exchange.fetch_order(order_id, symbol))
-                # Todo
-                # 1.部分約定の確認
                 if order.status == 'open':
                     if ((order.price != limit) or (order.amount != qty)):
                         order = self.exchange.cancel_order(order_id, symbol)
@@ -212,7 +212,6 @@ class StrategyBitflyer:
                     order = self.create_order(side, qty, limit, stop, trailing_offset, symbol)
             else:
                 order = self.create_order(side, qty, limit, stop, trailing_offset, symbol)
-
             self.orders[myid] = order
 
     def entry(self, myid, side, qty, limit=None, stop=None, trailing_offset=None, symbol=None):
@@ -278,7 +277,6 @@ class StrategyBitflyer:
 
         while True:
             self.interval = self.settings.interval
-
             try:
                 # ティッカー取得
                 self.ticker = self.fetch_ticker()
