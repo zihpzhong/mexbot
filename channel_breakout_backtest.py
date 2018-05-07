@@ -7,7 +7,7 @@ from numba import jit
 from indicator import *
 
 # テストデータ読み込み
-data = pd.read_csv('csv/bitmex_201804_5m.csv', index_col='timestamp', parse_dates=True)
+data = pd.read_csv('csv/bitmex_20180401-15m.csv', index_col='timestamp', parse_dates=True)
 
 @jit
 def channel_breakout_backtest(ohlcv, breakout_in, breakout_out, fastperiod, slowperiod, filterth, take_profit, stop_loss, trailing_stop):
@@ -28,9 +28,9 @@ def channel_breakout_backtest(ohlcv, breakout_in, breakout_out, fastperiod, slow
     fastsma = sma(ohlcv.close, fastperiod)
     slowsma = sma(ohlcv.close, slowperiod)
     if filterth > 0:
-        canEntry = (fastsma - slowsma).abs() < filterth
-        long_entry_price[canEntry] = 0
-        short_entry_price[canEntry] = 0
+        ignoreEntry = (fastsma - slowsma).abs() > filterth
+        long_entry_price[ignoreEntry] = 0
+        short_entry_price[ignoreEntry] = 0
 
     long_entry = ohlcv.close > long_entry_price
     long_exit = ohlcv.close < long_exit_price
@@ -69,8 +69,8 @@ def channel_breakout_backtest(ohlcv, breakout_in, breakout_out, fastperiod, slow
 
 default_parameters = {
     'ohlcv':data,
-    'breakout_in':22,
-    'breakout_out':5,
+    'breakout_in':26,
+    'breakout_out':26,
     'fastperiod':25,
     'slowperiod':50,
     'filterth':0,
@@ -80,14 +80,14 @@ default_parameters = {
 }
 
 hyperopt_parameters = {
-    'breakout_in': hp.quniform('breakout_in', 1, 30, 1),
-    'breakout_out': hp.quniform('breakout_out', 1, 30, 1),
-    # 'fastperiod': hp.quniform('fastperiod', 1, 25, 2),
-    # 'slowperiod': hp.quniform('slowperiod', 1, 50, 2),
-    # 'filterth': hp.quniform('filterth', 1, 50, 2),
+    # 'breakout_in': hp.quniform('breakout_in', 1, 30, 1),
+    # 'breakout_out': hp.quniform('breakout_out', 1, 30, 1),
+    'fastperiod': hp.quniform('fastperiod', 1, 50, 1),
+    'slowperiod': hp.quniform('slowperiod', 1, 50, 1),
+    'filterth': hp.quniform('filterth', 1, 50, 1),
     # 'take_profit': hp.quniform('take_profit', 0, 100, 5),
     # 'stop_loss': hp.quniform('stop_loss', 0, 40, 2),
     # 'trailing_stop': hp.quniform('trailing_stop', 0, 100, 1),
 }
 
-BacktestIteration(channel_breakout_backtest, default_parameters, hyperopt_parameters, 50)
+BacktestIteration(channel_breakout_backtest, default_parameters, hyperopt_parameters, 200)
