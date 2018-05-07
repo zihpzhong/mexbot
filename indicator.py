@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 
 def sma(source, period):
-    return source.rolling(period).mean()
+    return source.rolling(int(period)).mean()
 
 def ema(source, period):
     # alpha = 2.0 / (period + 1)
@@ -14,13 +14,13 @@ def rma(source, period):
     return source.ewm(alpha=alpha).mean()
 
 def highest(source, period):
-    return source.rolling(period).max()
+    return source.rolling(int(period)).max()
 
 def lowest(source, period):
-    return source.rolling(period).min()
+    return source.rolling(int(period)).min()
 
 def stdev(source, period):
-    return source.rolling(period).std()
+    return source.rolling(int(period)).std()
 
 def rsi(source, period):
     diff = source.diff()
@@ -31,14 +31,16 @@ def rsi(source, period):
     return rsi
 
 def stoch(close, high, low, period):
+    period = int(period)
     hline = high.rolling(period).max()
     lline = low.rolling(period).min()
     return 100 * (close - lline) / (hline - lline)
 
 def momentum(source, period):
-    return source.diff(period)
+    return source.diff(int(period))
 
-def bband(source, period, mult=2):
+def bband(source, period, mult=2.0):
+    period = int(period)
     middle = source.rolling(period).mean()
     sigma = source.rolling(period).std()
     upper = middle+sigma*mult
@@ -47,10 +49,11 @@ def bband(source, period, mult=2):
 
 def macd(source, fastlen, slowlen, siglen):
     macd = source.ewm(span=fastlen).mean() - source.ewm(span=slowlen).mean()
-    signal = macd.rolling(siglen).mean()
+    signal = macd.rolling(int(siglen)).mean()
     return (macd, signal, macd-signal)
 
 def hlband(source, period):
+    period = int(period)
     high = source.rolling(period).max()
     low = source.rolling(period).min()
     return (high, low)
@@ -64,7 +67,9 @@ def wvf(close, low, period = 22, bbl = 20, mult = 2.0, lb = 50, ph = 0.85, pl=1.
     ph:     Highest Percentile - 0.90=90%, 0.95=95%, 0.99=99%
     pl:     Lowest Percentile - 1.10=90%, 1.05=95%, 1.01=99%
     """
-
+    bbl = int(bbl)
+    lb = int(lb)
+    period = int(period)
     # VixFix
     close_max = close.rolling(period).max()
     wvf = ((close_max - low) / close_max) * 100
@@ -86,7 +91,9 @@ def wvf_inv(close, high, period = 22, bbl = 20, mult = 2.0, lb = 50, ph = 0.85, 
     ph:     Highest Percentile - 0.90=90%, 0.95=95%, 0.99=99%
     pl:     Lowest Percentile - 1.10=90%, 1.05=95%, 1.01=99%
     """
-
+    bbl = int(bbl)
+    lb = int(lb)
+    period = int(period)
     # VixFix_inverse
     close_min = close.rolling(period).min()
     wvf_inv = abs(((close_min - high) / close_min) * 100)
@@ -129,15 +136,19 @@ def last(source, period=0):
     last(close, 0)  現在の足
     last(close, 1)  1つ前の足
     """
-    return source.iat[-1-period]
+    return source.iat[-1-int(period)]
 
 def pivothigh(source, leftbars, rightbars):
+    leftbars = int(leftbars)
+    rightbars = int(rightbars)
     high = source.rolling(leftbars).max()
     diff = high.diff()
     pvhi = pd.Series(high[diff >= 0], index=source.index)
     return pvhi.shift(rightbars) if rightbars > 0 else pvhi
 
 def pivotlow(source, leftbars, rightbars):
+    leftbars = int(leftbars)
+    rightbars = int(rightbars)
     low = source.rolling(leftbars).min()
     diff = low.diff()
     pvlo = pd.Series(low[diff <= 0], index=source.index)
@@ -154,8 +165,8 @@ def sar(high, low, start, inc, max):
     acc = start
     long = True
     for i in range(1, n):
+        sar[i] = sar[i-1] + acc * (ep - sar[i-1])
         if long:
-            sar[i] = sar[i-1] + acc * (ep - sar[i-1])
             if high[i] > ep:
                 ep = high[i]
                 if acc < max:
@@ -165,7 +176,6 @@ def sar(high, low, start, inc, max):
                 acc = start
                 sar[i] = ep
         else:
-            sar[i] = sar[i-1] + acc * (ep - sar[i-1])
             if low[i] < ep:
                 ep = low[i]
                 if acc < max:
@@ -176,18 +186,17 @@ def sar(high, low, start, inc, max):
                 sar[i] = ep
     return pd.Series(sar, index=index)
 
-def minimamu(a, b, period):
+def minimum(a, b, period):
     c = a.copy()
     sel = a > b
     c[sel] = b[sel]
-    return c.rolling(period).min()
+    return c.rolling(int(period)).min()
 
 def maximum(a, b, period):
     c = a.copy()
     sel = a < b
     c[sel] = b[sel]
-    return c.rolling(period).max()
-
+    return c.rolling(int(period)).max()
 
 if __name__ == '__main__':
 
@@ -200,7 +209,7 @@ if __name__ == '__main__':
     # gwalk = np.cumprod(np.exp(scale*dn))*p0
     # data = pd.Series(gwalk)
 
-    ohlc = pd.read_csv('csv/bitmex_20180428_1m.csv', index_col='timestamp', parse_dates=True)
+    ohlc = pd.read_csv('csv/bitmex_201804_1h.csv', index_col='timestamp', parse_dates=True)
 
     vsma = sma(ohlc.close, 10)
     vema = ema(ohlc.close, 10)
@@ -216,7 +225,7 @@ if __name__ == '__main__':
     vpivoth = pivothigh(ohlc.high, 4, 2).ffill()
     vpivotl = pivotlow(ohlc.low, 4, 2).ffill()
     vsar = sar(ohlc.high, ohlc.low, 0.02, 0.02, 0.2)
-    vmin = minimamu(ohlc.open, ohlc.close, 14)
+    vmin = minimum(ohlc.open, ohlc.close, 14)
     vmax = maximum(ohlc.open, ohlc.close, 14)
     df = pd.DataFrame({
         'high':ohlc.high,

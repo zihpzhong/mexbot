@@ -3,9 +3,11 @@ import numpy as np
 import pandas as pd
 from numba import jit
 from utils import dotdict
+from hyperopt import hp, tpe, Trials, fmin, rand, anneal
 
 # PythonでFXシストレのバックテスト(1)
 # https://qiita.com/toyolab/items/e8292d2f051a88517cb2 より
+
 @jit
 def Backtest(ohlc,
     buy_entry=None, sell_entry=None, buy_exit=None, sell_exit=None,
@@ -186,15 +188,17 @@ def Backtest(ohlc,
 
 class BacktestReport:
     def __init__(self, Trades, PL):
+        self.calc(Trades, PL)
+
+    @jit
+    def calc(self, Trades, PL):
         self.Raw = dotdict()
         self.Raw.Trades = Trades
         self.Raw.PL = PL
 
-        self.Long = dotdict()
-        self.Short = dotdict()
-
         # ロング統計
         LongPL = PL['Long']
+        self.Long = dotdict()
         self.Long.Trades = np.count_nonzero(LongPL)
         self.Long.GrossProfit = LongPL.clip_lower(0).sum()
         self.Long.GrossLoss =  LongPL.clip_upper(0).sum()
@@ -216,6 +220,7 @@ class BacktestReport:
 
         # ショート統計
         ShortPL = PL['Short']
+        self.Short = dotdict()
         self.Short.Trades = np.count_nonzero(ShortPL)
         self.Short.GrossProfit = ShortPL.clip_lower(0).sum()
         self.Short.GrossLoss = ShortPL.clip_upper(0).sum()
@@ -235,22 +240,25 @@ class BacktestReport:
         else:
             self.Short.LossTrades = 0
 
-        # 全体統計
-        self.Trades = self.Long.Trades + self.Short.Trades
-        self.WinTrades = self.Long.WinTrades + self.Short.WinTrades
-        self.WinRatio = self.WinTrades / self.Trades if self.Trades > 0 else 0.0
-        self.LossTrades = self.Long.LossTrades + self.Short.LossTrades
-        self.GrossProfit = self.Long.GrossProfit + self.Short.GrossProfit
-        self.GrossLoss = self.Long.GrossLoss + self.Short.GrossLoss
-        self.WinAverage = self.GrossProfit / self.WinTrades if self.WinTrades > 0 else 0
-        self.LossAverage = self.GrossLoss / self.LossTrades if self.LossTrades > 0 else 0
-        self.Profit = self.GrossProfit + self.GrossLoss
+        # 資産
         self.Equity = (LongPL + ShortPL).cumsum()
-        self.DrawDown = (self.Equity.cummax() - self.Equity).max()
-        self.ProfitFactor = self.GrossProfit / -self.GrossLoss if -self.GrossLoss > 0 else self.GrossProfit
-        self.RecoveryFactor = self.ProfitFactor / self.DrawDown if self.DrawDown > 0 else self.ProfitFactor
-        self.ExpectedProfit = (self.WinAverage * self.WinRatio) + ((1 - self.WinRatio) * self.LossAverage)
-        self.ExpectedValue = (self.WinRatio * (self.WinAverage / abs(self.LossAverage))) - (1 - self.WinRatio) if self.LossAverage < 0 else 1
+
+        # 全体統計
+        self.Total = dotdict()
+        self.Total.Trades = self.Long.Trades + self.Short.Trades
+        self.Total.WinTrades = self.Long.WinTrades + self.Short.WinTrades
+        self.Total.WinRatio = self.Total.WinTrades / self.Total.Trades if self.Total.Trades > 0 else 0.0
+        self.Total.LossTrades = self.Long.LossTrades + self.Short.LossTrades
+        self.Total.GrossProfit = self.Long.GrossProfit + self.Short.GrossProfit
+        self.Total.GrossLoss = self.Long.GrossLoss + self.Short.GrossLoss
+        self.Total.WinAverage = self.Total.GrossProfit / self.Total.WinTrades if self.Total.WinTrades > 0 else 0
+        self.Total.LossAverage = self.Total.GrossLoss / self.Total.LossTrades if self.Total.LossTrades > 0 else 0
+        self.Total.Profit = self.Total.GrossProfit + self.Total.GrossLoss
+        self.Total.DrawDown = (self.Equity.cummax() - self.Equity).max()
+        self.Total.ProfitFactor = self.Total.GrossProfit / -self.Total.GrossLoss if -self.Total.GrossLoss > 0 else self.Total.GrossProfit
+        self.Total.RecoveryFactor = self.Total.ProfitFactor / self.Total.DrawDown if self.Total.DrawDown > 0 else self.Total.ProfitFactor
+        self.Total.ExpectedProfit = (self.Total.WinAverage * self.Total.WinRatio) + ((1 - self.Total.WinRatio) * self.Total.LossAverage)
+        self.Total.ExpectedValue = (self.Total.WinRatio * (self.Total.WinAverage / abs(self.Total.LossAverage))) - (1 - self.Total.WinRatio) if self.Total.LossAverage < 0 else 1
 
     def __str__(self):
         return 'Long\n' \
@@ -278,17 +286,73 @@ class BacktestReport:
         '  GrossLoss :' + str(self.Short.GrossLoss) + '\n' \
         '  Profit :' + str(self.Short.Profit) + '\n' \
         '\nTotal\n' \
-        '  Trades :' + str(self.Trades) + '\n' \
-        '  WinTrades :' + str(self.WinTrades) + '\n' \
-        '  WinAverage :' + str(self.WinAverage) + '\n' \
-        '  WinRatio :' + str(self.WinRatio) + '\n' \
-        '  LossTrades :' + str(self.LossTrades) + '\n' \
-        '  LossAverage :' + str(self.LossAverage) + '\n' \
-        '  GrossProfit :' + str(self.GrossProfit) + '\n' \
-        '  GrossLoss :' + str(self.GrossLoss) + '\n' \
-        '  Profit :' + str(self.Profit) + '\n' \
-        '  DrawDown :' + str(self.DrawDown) + '\n' \
-        '  ProfitFactor :' + str(self.ProfitFactor) + '\n' \
-        '  RecoveryFactor :' + str(self.RecoveryFactor) + '\n' \
-        '  ExpectedProfit :' + str(self.ExpectedProfit) + '\n' \
-        '  ExpectedValue :' + str(self.ExpectedValue) + '\n'
+        '  Trades :' + str(self.Total.Trades) + '\n' \
+        '  WinTrades :' + str(self.Total.WinTrades) + '\n' \
+        '  WinAverage :' + str(self.Total.WinAverage) + '\n' \
+        '  WinRatio :' + str(self.Total.WinRatio) + '\n' \
+        '  LossTrades :' + str(self.Total.LossTrades) + '\n' \
+        '  LossAverage :' + str(self.Total.LossAverage) + '\n' \
+        '  GrossProfit :' + str(self.Total.GrossProfit) + '\n' \
+        '  GrossLoss :' + str(self.Total.GrossLoss) + '\n' \
+        '  Profit :' + str(self.Total.Profit) + '\n' \
+        '  DrawDown :' + str(self.Total.DrawDown) + '\n' \
+        '  ProfitFactor :' + str(self.Total.ProfitFactor) + '\n' \
+        '  RecoveryFactor :' + str(self.Total.RecoveryFactor) + '\n' \
+        '  ExpectedProfit :' + str(self.Total.ExpectedProfit) + '\n' \
+        '  ExpectedValue :' + str(self.Total.ExpectedValue) + '\n'
+
+# 参考
+# https://qiita.com/kenchin110100/items/ac3edb480d789481f134
+
+def BacktestIteration(testfunc, default_parameters, hyperopt_parameters, max_evals):
+
+    needs_header = [True]
+
+    def objective(args):
+        params = default_parameters.copy()
+        params.update(args)
+        report = testfunc(**params)
+        params.update(report.Total)
+        del params['ohlcv']
+        if needs_header[0]:
+            print(','.join(params.keys()))
+        values = [str(x) for x in params.values()]
+        print(','.join(values))
+        needs_header[0] = False
+        return -1 * report.Total.Profit
+
+    # 試行の過程を記録するインスタンス
+    trials = Trials()
+
+    if max_evals > 0:
+        best = fmin(
+            # 最小化する値を定義した関数
+            objective,
+            # 探索するパラメータのdictもしくはlist
+            hyperopt_parameters,
+            # どのロジックを利用するか、基本的にはtpe.suggestでok
+            # rand.suggest ランダム・サーチ？
+            # anneal.suggest 焼きなましっぽい
+            algo=tpe.suggest,
+            #algo=rand.suggest,
+            #algo=anneal.suggest,
+            max_evals=max_evals,
+            trials=trials,
+            # 試行の過程を出力
+            verbose=0
+        )
+    else:
+        best = default_parameters
+
+    params = default_parameters.copy()
+    params.update(best)
+    report = testfunc(**params)
+    params.update(report.Total)
+    del params['ohlcv']
+    values = [str(x) for x in params.values()]
+    print(','.join(values))
+
+    report.Raw.Trades.to_csv('trades.csv')
+    report.Raw.PL.to_csv('pl.csv')
+    report.Equity.to_csv('equity.csv')
+    print(report)
