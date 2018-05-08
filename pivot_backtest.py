@@ -10,13 +10,13 @@ from indicator import *
 data = pd.read_csv('csv/bitmex_201804_5m.csv', index_col='timestamp', parse_dates=True)
 
 @jit
-def pivot_backtest(ohlc, leftbars, rightbars, trailing_stop=0):
+def pivot_backtest(ohlcv, leftbars, rightbars, trailing_stop=0):
 
-    ignore = leftbars + rightbars
+    ignore = int(leftbars + rightbars)
 
     # ピボットハイ＆ロー
-    long_entry_price = pivothigh(ohlc.high, leftbars, rightbars).ffill()
-    short_entry_price = pivotlow(ohlc.low, leftbars, rightbars).ffill()
+    long_entry_price = pivothigh(ohlcv.high, leftbars, rightbars).ffill()
+    short_entry_price = pivotlow(ohlcv.low, leftbars, rightbars).ffill()
     long_exit_price = short_entry_price
     short_exit_price = long_entry_price
 
@@ -26,8 +26,8 @@ def pivot_backtest(ohlc, leftbars, rightbars, trailing_stop=0):
     short_entry_price[:ignore] = 0
     short_exit_price[:ignore] = 0
 
-    long_entry = ohlc.close > long_entry_price
-    short_entry = ohlc.close < short_entry_price
+    long_entry = ohlcv.close > long_entry_price
+    short_entry = ohlcv.close < short_entry_price
 
     long_exit = short_entry
     short_exit = long_entry
@@ -52,14 +52,14 @@ def pivot_backtest(ohlc, leftbars, rightbars, trailing_stop=0):
         short_exit_price = None
 
     # バックテスト実施
-    entry_exit = pd.DataFrame({'close':ohlc.close, 'high':ohlc.high, 'low':ohlc.low,
+    entry_exit = pd.DataFrame({'close':ohlcv.close, 'high':ohlcv.high, 'low':ohlcv.low,
         'long_entry_price':long_entry_price, 'long_exit_price':long_exit_price, 'long_entry':long_entry, 'long_exit':long_exit,
-        'short_entry_price':short_entry_price, 'short_entry':short_entry, 'short_exit_price':short_exit_price, 'short_exit':short_exit})#, index=data.index)
+        'short_entry_price':short_entry_price, 'short_entry':short_entry, 'short_exit_price':short_exit_price, 'short_exit':short_exit})#, index=ohlcv.index)
     entry_exit.to_csv('entry_exit.csv')
 
-    return Backtest(data, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit,
+    return Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit,
         stop_buy_entry=long_entry_price, stop_sell_entry=short_entry_price, stop_buy_exit=long_exit_price, stop_sell_exit=short_exit_price,
-        lots=1, spread=6, trailing_stop=trailing_stop, slippage=0)
+        lots=1, spread=0, trailing_stop=trailing_stop, slippage=0)
 
 default_parameters = {
     'ohlcv':data,
@@ -69,9 +69,9 @@ default_parameters = {
 }
 
 hyperopt_parameters = {
-    'leftbars': hp.quniform('leftbars', 1, 20, 1),
-    'rightbars': hp.quniform('rightbars', 0, 20, 1),
+    'leftbars': hp.quniform('leftbars', 1, 200, 1),
+    #'rightbars': hp.quniform('rightbars', 0, 20, 1),
     # 'trailing_stop': hp.quniform('trailing_stop', 0, 100, 1),
 }
 
-BacktestIteration(pivot_backtest, default_parameters, hyperopt_parameters, 50)
+BacktestIteration(pivot_backtest, default_parameters, hyperopt_parameters, 400)

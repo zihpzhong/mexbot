@@ -125,10 +125,14 @@ def atr(close, high, low, period):
     return tr(close, high, low).ewm(alpha=alpha).mean()
 
 def crossover(a, b):
-    return (a > b) & (b > a.shift(1))
+    cond1 = (a > b)
+    cond2 = ~cond1
+    return cond1 & cond2.shift(1)
 
 def crossunder(a, b):
-    return (a < b) & (b < a.shift(1))
+    cond1 = (a < b)
+    cond2 = ~cond1
+    return cond1 & cond2.shift(1)
 
 def last(source, period=0):
     """
