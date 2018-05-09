@@ -21,6 +21,7 @@ def Backtest(ohlc,
     N = len(ohlc) #データサイズ
     buyExecPrice = sellExecPrice = 0.0 # 売買価格
     buyStopEntry = buyStopExit = sellStopEntry = sellStopExit = 0
+    buyExecLot = sellExecLot = 0
 
     LongTrade = np.zeros(N) # 買いトレード情報
     ShortTrade = np.zeros(N) # 売りトレード情報
@@ -29,6 +30,10 @@ def Backtest(ohlc,
     ShortPL = np.zeros(N) # 売りポジションの損益
 
     place_holder = np.zeros(N) # プレースホルダ
+    if isinstance(lots, pd.Series):
+        lots = lots.values
+    else:
+        lots = np.full(shape=(N), fill_value=lots)
 
     buy_entry = place_holder if buy_entry is None else buy_entry.values
     sell_entry = place_holder if sell_entry is None else sell_entry.values
@@ -73,6 +78,7 @@ def Backtest(ohlc,
             if OpenPrice > 0:
                 buyExecPrice = OpenPrice + spread + slippage
                 LongTrade[i] = buyExecPrice #買いポジションオープン
+                buyExecLot = lots[i]
                 BuyNow = True
         else:
             ClosePrice = 0
@@ -92,8 +98,8 @@ def Backtest(ohlc,
             if ClosePrice > 0:
                 ClosePrice = ClosePrice - slippage
                 LongTrade[i] = -ClosePrice #買いポジションクローズ
-                LongPL[i] = (ClosePrice - buyExecPrice) * lots #損益確定
-                buyExecPrice = 0
+                LongPL[i] = (ClosePrice - buyExecPrice) * buyExecLot #損益確定
+                buyExecPrice = buyExecLot = 0
 
         # 売り注文処理
         if sellExecPrice == 0:
@@ -114,6 +120,7 @@ def Backtest(ohlc,
             if OpenPrice:
                 sellExecPrice = OpenPrice - slippage
                 ShortTrade[i] = sellExecPrice #売りポジションオープン
+                sellExecLot = lots[i]
                 SellNow = True
         else:
             ClosePrice = 0
@@ -133,8 +140,8 @@ def Backtest(ohlc,
             if ClosePrice > 0:
                 ClosePrice = ClosePrice + spread + slippage
                 ShortTrade[i] = -ClosePrice #売りポジションクローズ
-                ShortPL[i] = (sellExecPrice - ClosePrice) * lots #損益確定
-                sellExecPrice = 0
+                ShortPL[i] = (sellExecPrice - ClosePrice) * sellExecLot #損益確定
+                sellExecPrice = sellExecLot = 0
 
         # 利確 or 損切によるポジションの決済(エントリーと同じ足で決済しない)
         if buyExecPrice != 0 and not BuyNow:
@@ -151,8 +158,8 @@ def Backtest(ohlc,
                     ClosePrice = LimitPrice - slippage
             if ClosePrice > 0:
                 LongTrade[i] = -ClosePrice #買いポジションクローズ
-                LongPL[i] = (ClosePrice - buyExecPrice) * lots #損益確定
-                buyExecPrice = 0
+                LongPL[i] = (ClosePrice - buyExecPrice) * buyExecLot #損益確定
+                buyExecPrice = buyExecLot = 0
 
         if sellExecPrice != 0 and not SellNow:
             ClosePrice = 0
@@ -168,18 +175,18 @@ def Backtest(ohlc,
                     ClosePrice = LimitPrice + slippage
             if ClosePrice > 0:
                 ShortTrade[i] = -ClosePrice #売りポジションクローズ
-                ShortPL[i] = (sellExecPrice - ClosePrice) * lots #損益確定
-                sellExecPrice = 0
+                ShortPL[i] = (sellExecPrice - ClosePrice) * sellExecLot #損益確定
+                sellExecPrice = sellExecLot = 0
 
     # ポジションクローズ
     if buyExecPrice > 0:
         ClosePrice = Close[N-1]
         LongTrade[N-1] = -ClosePrice #買いポジションクローズ
-        LongPL[N-1] = (ClosePrice - buyExecPrice) * lots #損益確定
+        LongPL[N-1] = (ClosePrice - buyExecPrice) * buyExecLot #損益確定
     if sellExecPrice > 0:
         ClosePrice = Close[N-1]
         ShortTrade[N-1] = -ClosePrice #売りポジションクローズ
-        ShortPL[N-1] = (sellExecPrice - ClosePrice) * lots #損益確定
+        ShortPL[N-1] = (sellExecPrice - ClosePrice) * sellExecLot #損益確定
 
     return BacktestReport(
         Trades=pd.DataFrame({'Long':LongTrade, 'Short':ShortTrade}, index=ohlc.index),
