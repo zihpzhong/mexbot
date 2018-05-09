@@ -277,8 +277,7 @@ class Strategy:
             if myid in self.orders:
                 order_id = self.orders[myid].id
                 order = dotdict(self.exchange.fetch_order(order_id))
-                # Todo
-                # 1.部分約定の確認
+                # オープンの場合、注文を編集
                 if order.status == 'open':
                     # オーダータイプが異なる or STOP注文がトリガーされたら編集に失敗するのでキャンセルしてから新規注文する
                     order_type = 'stop' if stop is not None else ''
@@ -292,6 +291,10 @@ class Strategy:
                             (order.info['stopPx'] is not None and order.info['stopPx'] != stop) or
                             (order.info['orderQty'] is not None and order.info['orderQty'] != qty)):
                             order = self.edit_order(order_id, side, qty, limit, stop, trailing_offset, symbol)
+                # 約定していた場合、注文しない
+                elif order.status == 'closed':
+                    pass
+                # 注文がない場合、新規注文
                 else:
                     order = self.create_order(side, qty, limit, stop, trailing_offset, symbol)
             else:
