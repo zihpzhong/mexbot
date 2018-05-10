@@ -283,6 +283,7 @@ class Strategy:
                     order_type = 'stop' if stop is not None else ''
                     order_type = order_type + 'limit' if limit is not None else order_type
                     if (order_type != order.type) or (order.type == 'stoplimit' and order.info.triggered == 'StopOrderTriggered'):
+                        # 注文キャンセルに失敗した場合、ポジション取得からやり直す
                         self.exchange.cancel_order(order_id)
                         order = self.create_order(side, qty, limit, stop, trailing_offset, symbol)
                     else:
@@ -291,9 +292,6 @@ class Strategy:
                             (order.info.stopPx is not None and order.info.stopPx != stop) or
                             (order.info.orderQty is not None and order.info.orderQty != qty)):
                             order = self.edit_order(order_id, side, qty, limit, stop, trailing_offset, symbol)
-                # 約定していた場合、注文しない
-                elif order.status == 'closed':
-                    pass
                 # 注文がない場合、新規注文
                 else:
                     order = self.create_order(side, qty, limit, stop, trailing_offset, symbol)
@@ -416,6 +414,9 @@ class Strategy:
             except ccxt.AuthenticationError as e:
                 self.logger.warning(type(e).__name__ + ": {0}".format(e))
                 break
+            except ccxt.OrderNotFound as e:
+                self.logger.warning(type(e).__name__ + ": {0}".format(e))
+                errorWait = 0.5
             except ccxt.ExchangeError as e:
                 self.logger.warning(type(e).__name__ + ": {0}".format(e))
                 errorWait = 1
