@@ -15,32 +15,26 @@ def channel_breakout_backtest(ohlcv, breakout_in, breakout_out, rsiperiod, overB
     # エントリー・エグジット
     long_entry_price = highest(ohlcv.high, breakout_in) + 0.5
     long_exit_price = lowest(ohlcv.low, breakout_out) - 0.5
-
     short_entry_price = lowest(ohlcv.low, breakout_in) - 0.5
     short_exit_price = highest(ohlcv.high, breakout_out) + 0.5
 
     # 値が確定するまでの間はノーポジ
     long_entry_price[:ignore] = 0
     long_exit_price[:ignore] = 0
-
     short_entry_price[:ignore] = 0
     short_exit_price[:ignore] = 0
 
     # RSIによる利確とエントリー制限
-    vrsi = rsi(ohlcv.close, rsiperiod)
-    # long_entry_price[vrsi > overBought] = 0
-    # long_exit_price[vrsi > overBought] = ohlcv.close
-    # short_entry_price[vrsi < overSold] = 0
-    # short_exit_price[vrsi < overSold] = ohlcv.close
-
-    # RSIによるロット制限
-    # lots = (vrsi - 50).abs()
-    # lots = 1 - (lots / 50)
+    if rsiperiod:
+        vrsi = rsi(ohlcv.close, rsiperiod)
+        long_entry_price[vrsi > overBought] = 0
+        long_exit_price[vrsi > overBought] = ohlcv.close
+        short_entry_price[vrsi < overSold] = 0
+        short_exit_price[vrsi < overSold] = ohlcv.close
 
     # 2つの移動平均線の剥離によるエントリー制限
     fastsma = sma(ohlcv.close, fastperiod)
     slowsma = sma(ohlcv.close, slowperiod)
-
     # if filterth > 0:
     #     ignoreEntry = (fastsma - slowsma).abs() > filterth
     #     long_entry_price[ignoreEntry] = 0
@@ -51,27 +45,40 @@ def channel_breakout_backtest(ohlcv, breakout_in, breakout_out, rsiperiod, overB
         lots = (1 - (fastsma / slowsma)).abs()
         lots = (1 - lots * klot)
         lots.clip(0.01, 1.0, inplace=True)
+        lots = lots
     else:
         lots = 1
 
-    # 出来高によるロット制限
-    # vol = sma(ohlcv.volume, 6)
-    # vol = vol / vol.shift(1)
-    # lots = 1-(1 - vol).abs()
-    # lots.clip(0.1, 1.0, inplace=True)
+    # ATRによるロット制限
+    # if klot > 0:
+    #     lots = atr(ohlcv.close, ohlcv.high, ohlcv.low, 14)
+    #     lots = 1 - (lots / klot)
+    #     lots.clip(0.001, 1.0, inplace=True)
+    #     lots = lots * 10
+    # else:
+    #     lots = 1
+
+    # 標準偏差によるロット制限
+    # if klot > 0:
+    #     lots = stdev(ohlcv.close, 20)
+    #     lots = 1 - (lots / klot)
+    #     lots.clip(0.001, 1.0, inplace=True)
+    #     lots = lots
+    # else:
+    #     lots = 1
 
     # 成り行き売買時の条件設定
     long_entry = ohlcv.close > long_entry_price.shift(1)
     long_exit = ohlcv.close < long_exit_price.shift(1)
-    long_exit[vrsi > overBought] = True
-
     short_entry = ohlcv.close < short_entry_price.shift(1)
     short_exit = ohlcv.close > short_exit_price.shift(1)
-    short_exit[vrsi < overSold] = True
+
+    if rsiperiod:
+        long_exit[vrsi > overBought] = True
+        short_exit[vrsi < overSold] = True
 
     long_entry[:ignore] = 0
     long_exit[:ignore] = 0
-
     short_entry[:ignore] = 0
     short_exit[:ignore] = 0
 
@@ -102,7 +109,7 @@ default_parameters = {
     'ohlcv':data,
     'breakout_in':22,
     'breakout_out':22,
-    'rsiperiod':50,
+    'rsiperiod':0,
     'overBought':79,
     'overSold':29,
     'fastperiod':13,
@@ -111,7 +118,7 @@ default_parameters = {
     'take_profit':0,
     'stop_loss':0,
     'trailing_stop':0,
-    'klot':75,
+    'klot':0,
 }
 
 hyperopt_parameters = {
@@ -126,7 +133,7 @@ hyperopt_parameters = {
     # 'take_profit': hp.quniform('take_profit', 0, 100, 5),
     # 'stop_loss': hp.quniform('stop_loss', 0, 40, 2),
     # 'trailing_stop': hp.quniform('trailing_stop', 0, 100, 1),
-    'klot': hp.quniform('klot', 1, 1000, 10),
+    'klot': hp.loguniform('klot', 1, 10),
 }
 
-BacktestIteration(channel_breakout_backtest, default_parameters, hyperopt_parameters, 200)
+BacktestIteration(channel_breakout_backtest, default_parameters, hyperopt_parameters, 0)

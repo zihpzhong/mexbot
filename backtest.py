@@ -326,7 +326,7 @@ def BacktestIteration(testfunc, default_parameters, hyperopt_parameters, max_eva
         values = [str(x) for x in params.values()]
         print(','.join(values))
         needs_header[0] = False
-        return -1 * report.Total.Profit
+        return -1 * report.Total.ProfitFactor
 
     # 試行の過程を記録するインスタンス
     trials = Trials()

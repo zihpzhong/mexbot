@@ -103,7 +103,6 @@ class Strategy:
         self.logger = logging.getLogger(__name__)
 
 
-    @excahge_error
     def fetch_ticker(self, symbol=None, timeframe=None):
         symbol = symbol or self.settings.symbol
         timeframe = timeframe or self.settings.timeframe
@@ -112,7 +111,6 @@ class Strategy:
         self.logger.info("TICK: ohlc {open} {high} {low} {close} bid {bid} ask {ask}".format(**ticker))
         return ticker
 
-    @excahge_error
     def fetch_ohlcv(self, symbol=None, timeframe=None):
         """過去100件のOHLCVを取得"""
         symbol = symbol or self.settings.symbol
@@ -140,7 +138,6 @@ class Strategy:
         self.logger.info("OHLCV: {open} {high} {low} {close} {volume}".format(**df.iloc[-1]))
         return df
 
-    @excahge_error
     def fetch_position(self, symbol=None):
         """現在のポジションを取得"""
         symbol = symbol or self.settings.symbol
@@ -160,13 +157,17 @@ class Strategy:
         self.logger.info("POSITION: qty {currentQty} cost {avgCostPrice} pnl {unrealisedPnl}({unrealisedPnlPcnt100:.2f}%) {realisedPnl}".format(**pos))
         return pos
 
-    @excahge_error
     def fetch_balance(self):
         """資産情報取得"""
         balance = dotdict(self.exchange.fetch_balance())
         balance.BTC = dotdict(balance.BTC)
         self.logger.info("BALANCE: free {free:.3f} used {used:.3f} total {total:.3f}".format(**balance.BTC))
         return balance
+
+    def fetch_order(self, order_id):
+        order = dotdict(self.exchange.fetch_order(order_id))
+        order.info = dotdict(order.info)
+        return order
 
     @excahge_error
     def close_position(self, symbol=None):
@@ -240,7 +241,6 @@ class Strategy:
         self.logger.info("EDIT: {orderID} {side} {orderQty} {price}({stopPx})".format(**res['info']))
         return dotdict(res)
 
-    @excahge_error
     def order(self, myid, side, qty, limit=None, stop=None, trailing_offset=None, symbol=None):
         """注文"""
 
@@ -276,21 +276,21 @@ class Strategy:
 
             if myid in self.orders:
                 order_id = self.orders[myid].id
-                order = dotdict(self.exchange.fetch_order(order_id))
+                order = self.fetch_order(order_id)
                 # Todo
                 # 1.部分約定の確認
                 if order.status == 'open':
                     # オーダータイプが異なる or STOP注文がトリガーされたら編集に失敗するのでキャンセルしてから新規注文する
                     order_type = 'stop' if stop is not None else ''
                     order_type = order_type + 'limit' if limit is not None else order_type
-                    if (order_type != order.type) or (order.type == 'stoplimit' and order.info['triggered'] == 'StopOrderTriggered'):
-                        order = self.exchange.cancel_order(order_id)
+                    if (order_type != order.type) or (order.type == 'stoplimit' and order.info.triggered == 'StopOrderTriggered'):
+                        self.exchange.cancel_order(order_id)
                         order = self.create_order(side, qty, limit, stop, trailing_offset, symbol)
                     else:
                         # 指値・ストップ価格・数量に変更がある場合のみ編集を行う
-                        if ((order.info['price'] is not None and order.info['price'] != limit) or
-                            (order.info['stopPx'] is not None and order.info['stopPx'] != stop) or
-                            (order.info['orderQty'] is not None and order.info['orderQty'] != qty)):
+                        if ((order.info.price is not None and order.info.price != limit) or
+                            (order.info.stopPx is not None and order.info.stopPx != stop) or
+                            (order.info.orderQty is not None and order.info.orderQty != qty)):
                             order = self.edit_order(order_id, side, qty, limit, stop, trailing_offset, symbol)
                 else:
                     order = self.create_order(side, qty, limit, stop, trailing_offset, symbol)
@@ -354,6 +354,7 @@ class Strategy:
 
     def start(self):
         self.setup()
+
         if isinstance(self.yourlogic, Trading):
             self.yourlogic.setup(self)
 
@@ -362,10 +363,16 @@ class Strategy:
         # 強制足取得
         self.update_ohlcv(force_update=True)
 
+        errorWait = 0
         while True:
             self.interval = self.settings.interval
 
             try:
+                # 例外発生時の待ち
+                if errorWait:
+                    sleep(errorWait)
+                    errorWait = 0
+
                 # ティッカー取得
                 self.ticker = self.fetch_ticker()
 
@@ -391,13 +398,30 @@ class Strategy:
                 else:
                     self.yourlogic(**arg)
 
+                # 通常待ち
                 sleep(self.interval)
 
+            except ccxt.DDoSProtection as e:
+                self.logger.warning(type(e).__name__ + ": {0}".format(e))
+                errorWait = 5
+            except ccxt.RequestTimeout as e:
+                self.logger.warning(type(e).__name__ + ": {0}".format(e))
+                errorWait = 5
+            except ccxt.ExchangeNotAvailable as e:
+                self.logger.warning(type(e).__name__ + ": {0}".format(e))
+                errorWait = 20
+            except ccxt.AuthenticationError as e:
+                self.logger.warning(type(e).__name__ + ": {0}".format(e))
+                break
+            except ccxt.ExchangeError as e:
+                self.logger.warning(type(e).__name__ + ": {0}".format(e))
+                errorWait = 1
             except (KeyboardInterrupt, SystemExit):
                 self.logger.info('Shutdown!')
                 break
             except Exception as e:
                 self.logger.exception(e)
+                errorWait = 1
 
         self.logger.info("Stop Trading")
 

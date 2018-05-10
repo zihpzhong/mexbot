@@ -121,8 +121,7 @@ def tr(close, high, low):
     return tr
 
 def atr(close, high, low, period):
-    alpha = 1.0 / (period)
-    return tr(close, high, low).ewm(alpha=alpha).mean()
+    return rma(tr(close, high, low), period)
 
 def crossover(a, b):
     cond1 = (a > b)
