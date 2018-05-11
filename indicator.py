@@ -47,8 +47,11 @@ def bband(source, period, mult=2.0):
     lower = middle-sigma*mult
     return (upper, lower, middle, sigma)
 
-def macd(source, fastlen, slowlen, siglen):
-    macd = source.ewm(span=fastlen).mean() - source.ewm(span=slowlen).mean()
+def macd(source, fastlen, slowlen, siglen, use_sma=False):
+    if use_sma:
+        macd = source.rolling(int(fastlen)).mean() - source.rolling(int(slowlen)).mean()
+    else:
+        macd = source.ewm(span=fastlen).mean() - source.ewm(span=slowlen).mean()
     signal = macd.rolling(int(siglen)).mean()
     return (macd, signal, macd-signal)
 

@@ -7,7 +7,7 @@ from numba import jit
 from indicator import *
 
 # テストデータ読み込み
-data = pd.read_csv('csv/bitmex_201804_5m.csv', index_col='timestamp', parse_dates=True)
+data = pd.read_csv('csv/bitmex_201801_1h.csv', index_col='timestamp', parse_dates=True)
 
 @jit
 def pivot_backtest(ohlcv, leftbars, rightbars, trailing_stop=0):
@@ -69,9 +69,9 @@ default_parameters = {
 }
 
 hyperopt_parameters = {
-    'leftbars': hp.quniform('leftbars', 1, 200, 1),
+    'leftbars': hp.quniform('leftbars', 1, 50, 1),
     #'rightbars': hp.quniform('rightbars', 0, 20, 1),
     # 'trailing_stop': hp.quniform('trailing_stop', 0, 100, 1),
 }
 
-BacktestIteration(pivot_backtest, default_parameters, hyperopt_parameters, 400)
+BacktestIteration(pivot_backtest, default_parameters, hyperopt_parameters, 50)

@@ -7,7 +7,7 @@ from numba import jit
 from indicator import *
 
 # テストデータ読み込み
-data = pd.read_csv('csv/bitmex_201804_5m.csv', index_col='timestamp', parse_dates=True)
+data = pd.read_csv('csv/bitmex_201801_1h.csv', index_col='timestamp', parse_dates=True)
 
 @jit
 def sar_backtest(ohlcv, start, inc, max):
@@ -45,8 +45,8 @@ default_parameters = {
 }
 
 hyperopt_parameters = {
-    'start': hp.quniform('start', 0.0, 0.1, 0.002),
-    'inc': hp.quniform('inc', 0.0, 0.1, 0.002),
+    'start': hp.quniform('start', 0.0, 0.1, 0.001),
+    'inc': hp.quniform('inc', 0.0, 0.1, 0.001),
     'max': hp.quniform('max', 0.0, 0.3, 0.01),
 }
 

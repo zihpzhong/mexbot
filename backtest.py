@@ -195,10 +195,6 @@ def Backtest(ohlc,
 
 class BacktestReport:
     def __init__(self, Trades, PL):
-        self.calc(Trades, PL)
-
-    @jit
-    def calc(self, Trades, PL):
         self.Raw = dotdict()
         self.Raw.Trades = Trades
         self.Raw.PL = PL
@@ -266,6 +262,24 @@ class BacktestReport:
         self.Total.RecoveryFactor = self.Total.ProfitFactor / self.Total.DrawDown if self.Total.DrawDown > 0 else self.Total.ProfitFactor
         self.Total.ExpectedProfit = (self.Total.WinAverage * self.Total.WinRatio) + ((1 - self.Total.WinRatio) * self.Total.LossAverage)
         self.Total.ExpectedValue = (self.Total.WinRatio * (self.Total.WinAverage / abs(self.Total.LossAverage))) - (1 - self.Total.WinRatio) if self.Total.LossAverage < 0 else 1
+
+    # def to_csv(self, header=False)
+    #     csv = ''
+    #     if header:
+    #         total_header = self.Total.keys()
+    #         long_header = self.Long.keys()
+    #         short_header = self.Short.keys()
+    #         csv = csv +       ','.join(total_header)
+    #         csv = csv + ',' + ','.join(long_header)
+    #         csv = csv + ',' + ','.join(short_header)
+    #         csv = csv + '\n'
+    #     total_values = [str(x) for x in self.Total.values()]
+    #     long_values = [str(x) for x in self.Long.values()]
+    #     short_values = [str(x) for x in self.Short.values()]
+    #     csv = csv +       ','.join(total_values)
+    #     csv = csv + ',' + ','.join(long_values)
+    #     csv = csv + ',' + ','.join(short_values)
+    #     return csv
 
     def __str__(self):
         return 'Long\n' \

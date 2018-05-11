@@ -7,37 +7,39 @@ from numba import jit
 from indicator import *
 
 # テストデータ読み込み
-data = pd.read_csv('csv/bitmex_201804_5m.csv', index_col='timestamp', parse_dates=True)
+data = pd.read_csv('csv/bitmex_201801_1h.csv', index_col='timestamp', parse_dates=True)
 
 @jit
-def stoch_backtest(ohlc, length, overBought, overSold):
+def stoch_backtest(ohlcv, length, overBought, overSold):
+
+    ignore = int(length)
 
     # インジケーター作成
-    vstoch = stoch(ohlc.close, ohlc.high, ohlc.low, length)
+    vstoch = stoch(ohlcv.close, ohlcv.high, ohlcv.low, length)
     vstoch_last = vstoch.shift(1)
 
     # エントリー／イグジット
-    long_entry = (vstoch > overSold) & (vstoch_last < overSold)
-    long_exit = (vstoch > overBought) & (vstoch_last < overBought)
-    short_entry = (vstoch < overBought) & (vstoch_last > overBought)
-    short_exit = (vstoch < overSold) & (vstoch_last > overSold)
+    long_entry = crossover(vstoch, overSold)
+    long_exit = crossover(vstoch, overBought)
+    short_entry = crossunder(vstoch, overBought)
+    short_exit = crossunder(vstoch, overSold)
 
     long_entry_price = None
     long_exit_price = None
     short_entry_price = None
     short_exit_price = None
 
-    long_entry[:length] = False
-    long_exit[:length] = False
-    short_entry[:length] = False
-    short_exit[:length] = False
+    long_entry[:ignore] = False
+    long_exit[:ignore] = False
+    short_entry[:ignore] = False
+    short_exit[:ignore] = False
 
-    # long_entry_price[:length] = 0
-    # long_exit_price[:length] = 0
-    # short_entry_price[:length] = 0
-    # short_exit_price[:length] = 0
+    # long_entry_price[:ignore] = 0
+    # long_exit_price[:ignore] = 0
+    # short_entry_price[:ignore] = 0
+    # short_exit_price[:ignore] = 0
 
-    entry_exit = pd.DataFrame({'close':ohlc.close, 'stoch':vstoch, 'stoch-last':vstoch_last,
+    entry_exit = pd.DataFrame({'close':ohlcv.close, 'stoch':vstoch, 'stoch-last':vstoch_last,
         'long_entry_price':long_entry_price, 'long_exit_price':long_exit_price, 'long_entry':long_entry, 'long_exit':long_exit,
         'short_entry_price':short_entry_price, 'short_entry':short_entry, 'short_exit_price':short_exit_price, 'short_exit':short_exit})#, index=ohlcv.index)
     entry_exit.to_csv('entry_exit.csv')
@@ -54,9 +56,9 @@ default_parameters = {
 }
 
 hyperopt_parameters = {
-    'length': hp.quniform('length', 1, 30, 1),
-    'overBought': hp.quniform('overBought', 1, 99, 3),
-    'overSold': hp.quniform('overSold', 1, 99, 3),
+    'length': hp.quniform('length', 1, 100, 1),
+    'overBought': hp.quniform('overBought', 1, 99, 1),
+    'overSold': hp.quniform('overSold', 1, 99, 1),
 }
 
-BacktestIteration(stoch_backtest, default_parameters, hyperopt_parameters, 50)
+BacktestIteration(stoch_backtest, default_parameters, hyperopt_parameters, 1000)
