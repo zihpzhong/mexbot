@@ -348,6 +348,10 @@ class Strategy:
                 })
         self.exchange.load_markets()
 
+        # マーケット情報表示
+        for k, v in self.exchange.markets.items():
+            self.logger.info('Markets: ' + v['symbol'])
+
         # 現在のポジションをすべて閉じる
         self.logger.info("Cancel all orders and close position")
         self.cancel_order_all()

@@ -48,9 +48,9 @@ def sma_cross_backtest(ohlcv, fastlen, slowlen, siglen):
 
 default_parameters = {
     'ohlcv':data,
-    'fastlen':9,
-    'slowlen':26,
-    'siglen':5,
+    'fastlen':19,
+    'slowlen':27,
+    'siglen':13,
 }
 
 hyperopt_parameters = {
