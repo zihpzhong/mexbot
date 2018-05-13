@@ -110,31 +110,30 @@ def wvf_inv(close, high, period = 22, bbl = 20, mult = 2.0, lb = 50, ph = 0.85, 
     return (wvf_inv, lowerBand, upperBand, rangeHigh, rangeLow)
 
 def tr(close, high, low):
-    diff_hl = high - low
     last = close.shift(1).fillna(close[0])
-    diff_hc = high - last
-    diff_hc = diff_hc.abs()
-    diff_lc = low - last
-    diff_lc = diff_lc.abs()
-    tr = diff_hl
-    sel = diff_hc > tr
-    tr[sel] = diff_hc[sel]
-    sel = diff_lc > tr
-    tr[sel] = diff_lc[sel]
+    tr = high - low
+    diff_hc = (high - last).abs()
+    diff_lc = (low - last).abs()
+    tr[diff_hc > tr] = diff_hc
+    tr[diff_lc > tr] = diff_lc
     return tr
 
 def atr(close, high, low, period):
-    return rma(tr(close, high, low), period)
+    last = close.shift(1).fillna(close[0])
+    tr = high - low
+    diff_hc = (high - last).abs()
+    diff_lc = (low - last).abs()
+    tr[diff_hc > tr] = diff_hc
+    tr[diff_lc > tr] = diff_lc
+    return tr.ewm(alpha=1.0/period).mean()
 
 def crossover(a, b):
     cond1 = (a > b)
-    cond2 = ~cond1
-    return cond1 & cond2.shift(1)
+    return cond1 & (~cond1).shift(1)
 
 def crossunder(a, b):
     cond1 = (a < b)
-    cond2 = ~cond1
-    return cond1 & cond2.shift(1)
+    return cond1 & (~cond1).shift(1)
 
 def last(source, period=0):
     """
@@ -194,17 +193,27 @@ def sar(high, low, start, inc, max):
 
 def minimum(a, b, period):
     c = a.copy()
-    sel = a > b
-    c[sel] = b[sel]
+    c[a > b] = b
     return c.rolling(int(period)).min()
 
 def maximum(a, b, period):
     c = a.copy()
-    sel = a < b
-    c[sel] = b[sel]
+    c[a < b] = b
     return c.rolling(int(period)).max()
 
 if __name__ == '__main__':
+
+    from functools import wraps
+    import time
+    def stop_watch(func) :
+        @wraps(func)
+        def wrapper(*args, **kargs) :
+            start = time.time()
+            result = func(*args,**kargs)
+            process_time =  (time.time() - start)*10000
+            print(f"{func.__name__} は {process_time:.3f} ミリ秒かかりました")
+            return result
+        return wrapper
 
     # import numpy as np
 
@@ -215,7 +224,25 @@ if __name__ == '__main__':
     # gwalk = np.cumprod(np.exp(scale*dn))*p0
     # data = pd.Series(gwalk)
 
-    ohlc = pd.read_csv('csv/bitmex_201804_1h.csv', index_col='timestamp', parse_dates=True)
+    ohlc = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
+
+    sma = stop_watch(sma)
+    ema = stop_watch(ema)
+    rma = stop_watch(rma)
+    rsi = stop_watch(rsi)
+    stoch = stop_watch(stoch)
+    wvf = stop_watch(wvf)
+    highest = stop_watch(highest)
+    lowest = stop_watch(lowest)
+    macd = stop_watch(macd)
+    tr = stop_watch(tr)
+    atr = stop_watch(atr)
+    pivothigh = stop_watch(pivothigh)
+    pivotlow = stop_watch(pivotlow)
+    pivotlow = stop_watch(pivotlow)
+    sar = stop_watch(sar)
+    minimum = stop_watch(minimum)
+    maximum = stop_watch(maximum)
 
     vsma = sma(ohlc.close, 10)
     vema = ema(ohlc.close, 10)

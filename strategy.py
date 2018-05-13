@@ -348,9 +348,18 @@ class Strategy:
                 })
         self.exchange.load_markets()
 
-        # マーケット情報表示
+        # マーケット一覧表示
         for k, v in self.exchange.markets.items():
             self.logger.info('Markets: ' + v['symbol'])
+
+        # マーケット情報表示
+        market = self.exchange.market(self.settings.symbol)
+        self.logger.info('{symbol}: base:{base}'.format(**market))
+        self.logger.info('{symbol}: quote:{quote}'.format(**market))
+        self.logger.info('{symbol}: active:{active}'.format(**market))
+        self.logger.info('{symbol}: taker:{taker}'.format(**market))
+        self.logger.info('{symbol}: maker:{maker}'.format(**market))
+        self.logger.info('{symbol}: type:{type}'.format(**market))
 
         # 現在のポジションをすべて閉じる
         self.logger.info("Cancel all orders and close position")
