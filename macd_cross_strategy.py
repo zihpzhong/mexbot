@@ -20,10 +20,20 @@ def macd_cross_strategy(ticker, ohlcv, position, balance, strategy):
     # エントリー／イグジット
     long_entry = last(vmacd > vsig)
     short_entry = last(vmacd < vsig)
-    logger.info('MACD {0:.0f} Signal {1:.0f}'.format(last(vmacd), last(vsig)))
+    if long_entry:
+        side = 'buy'
+    elif short_entry:
+        side = 'sell'
+    else:
+        side = 'none'
+    logger.info('MACD {0} Signal {1} Trigger {2}'.format(last(vmacd), last(vsig), side))
 
     # ロット数計算
-    qty_lot = int(balance.BTC.free * 0.01 * ticker.last)
+    quote = strategy.exchange.market(strategy.settings.symbol)['quote']
+    if quote == 'BTC':
+        qty_lot = int(balance.BTC.free * 0.01 / ticker.last)
+    else:
+        qty_lot = int(balance.BTC.free * 0.01 * ticker.last)
     logger.info('LOT: ' + str(qty_lot))
 
     # 最大ポジション数設定
