@@ -28,11 +28,19 @@ def sar_strategy(ticker, ohlcv, position, balance, strategy):
         strategy.entry('L', 'buy', qty=qty_lot, limit=max(vsar, ticker.bid), stop=vsar)
     else:
         strategy.cancel('L')
+        # 指値ささらなかったから成り行きでロング
+        if position.currentQty < 0:
+            strategy.entry('L', 'buy', qty=qty_lot)
+
     if vsar < last(ohlcv.low):
         vsar = int(vsar)
         strategy.entry('S', 'sell', qty=qty_lot, limit=min(vsar, ticker.ask), stop=vsar)
     else:
         strategy.cancel('S')
+        # 指値ささらなかったから成り行きでショート
+        if position.currentQty > 0:
+            strategy.entry('S', 'sell', qty=qty_lot)
+
 
 strategy = Strategy(sar_strategy)
 strategy.settings.timeframe = '1m'
