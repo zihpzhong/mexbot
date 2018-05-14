@@ -9,8 +9,8 @@ fastlen = 19
 slowlen = 27
 siglen = 13
 
-logging.config.fileConfig("logging.conf")
-logger = logging.getLogger("MACDCrossBot")
+logging.config.dictConfig(settings.logging_conf)
+logger = logging.getLogger('MACDCrossBot')
 
 def macd_cross_strategy(ticker, ohlcv, position, balance, strategy):
 
