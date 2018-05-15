@@ -1,16 +1,13 @@
 # -*- coding: utf-8 -*-
-from strategy import Strategy
 from indicator import *
-from settings import settings
-import logging
-import logging.config
 
+# インディケータ期間
 fastlen = 19
 slowlen = 27
 siglen = 13
 
-logging.config.dictConfig(settings.logging_conf)
-logger = logging.getLogger('MACDCrossBot')
+# ロット計算用資産比
+percent = 0.25
 
 def macd_cross_strategy(ticker, ohlcv, position, balance, strategy):
 
@@ -31,9 +28,9 @@ def macd_cross_strategy(ticker, ohlcv, position, balance, strategy):
     # ロット数計算
     quote = strategy.exchange.market(strategy.settings.symbol)['quote']
     if quote == 'BTC':
-        qty_lot = int(balance.BTC.free * 0.25 / ticker.last)
+        qty_lot = int(balance.BTC.free * percent / ticker.last)
     else:
-        qty_lot = int(balance.BTC.free * 0.25 * ticker.last)
+        qty_lot = int(balance.BTC.free * percent * ticker.last)
     logger.info('LOT: ' + str(qty_lot))
 
     # 最大ポジション数設定
@@ -50,12 +47,35 @@ def macd_cross_strategy(ticker, ohlcv, position, balance, strategy):
     else:
         strategy.cancel('S')
 
-strategy = Strategy(macd_cross_strategy)
-strategy.settings.timeframe = '1h'
-strategy.settings.interval = 60
-strategy.settings.apiKey = settings.apiKey
-strategy.settings.secret = settings.secret
-strategy.testnet.use = False
-strategy.testnet.apiKey = settings.testnet_apiKey
-strategy.testnet.secret = settings.testnet_secret
-strategy.start()
+
+if __name__ == '__main__':
+    import argparse
+    from strategy import Strategy
+    import settings
+    import logging
+    import logging.config
+
+    strategy = Strategy(macd_cross_strategy)
+    strategy.settings.timeframe = '1h'
+    strategy.settings.interval = 60
+    strategy.settings.apiKey = settings.apiKey
+    strategy.settings.secret = settings.secret
+    strategy.testnet.use = False
+    strategy.testnet.apiKey = settings.testnet_apiKey
+    strategy.testnet.secret = settings.testnet_secret
+
+    parser = strategy.add_arguments(argparse.ArgumentParser(description='MACD Cross Bot'))
+    parser.add_argument('--parameter', nargs=3, type=int, default=[fastlen, slowlen, siglen])
+    parser.add_argument('--percent', type=float, default=percent)
+    args = parser.parse_args()
+
+    logging.config.dictConfig(
+        settings.loggingConf('macd-cross-bot-' + args.symbol.replace('/','_').lower() + '.log'))
+    logger = logging.getLogger('MACDCrossBot')
+
+    fastlen = args.parameter[0]
+    slowlen = args.parameter[1]
+    siglen = args.parameter[2]
+    percent = args.percent
+
+    strategy.start(args)

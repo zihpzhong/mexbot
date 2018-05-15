@@ -8,6 +8,7 @@ import ccxt
 import pandas as pd
 from utils import dotdict
 from indicator import last
+import argparse
 
 class Trading:
     def setup(self, strategy):
@@ -366,7 +367,21 @@ class Strategy:
         self.cancel_order_all()
         self.close_position()
 
-    def start(self):
+    def add_arguments(self, parser):
+        parser.add_argument('--apiKey', type=str, default=self.settings.apiKey)
+        parser.add_argument('--secret', type=str, default=self.settings.secret)
+        parser.add_argument('--symbol', type=str, default=self.settings.symbol)
+        parser.add_argument('--timeframe', type=str, default=self.settings.timeframe)
+        parser.add_argument('--interval', type=float, default=self.settings.interval)
+        return parser
+
+    def start(self, args=None):
+
+        if args is not None:
+            self.settings.symbol = args.symbol
+            self.settings.timeframe = args.timeframe
+            self.settings.interval = args.interval
+
         self.setup()
 
         if isinstance(self.yourlogic, Trading):

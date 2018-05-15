@@ -1,18 +1,10 @@
 # -*- coding: utf-8 -*-
-from strategy import Strategy
 from indicator import *
-from settings import settings
-import logging
-import logging.config
-from datetime import datetime, timedelta
 
-logging.config.fileConfig("logging.conf")
-logger = logging.getLogger("ChbrkBot")
+# ロット計算用資産比
+percent = 0.3
 
-# 資産比 N% を購入
-lot_ratio_to_asset = 0.3
-
-# ブレイクアウトエントリー期間
+# ブレイクアウト期間
 breakout_in = 22
 breakout_out = 6
 
@@ -29,7 +21,7 @@ def channel_breakout_strategy(ticker, ohlcv, position, balance, strategy):
     close = last(ohlcv.close)
 
     # ロット数計算
-    qty_lot = int(balance.BTC.free * lot_ratio_to_asset * ticker.last)
+    qty_lot = int(balance.BTC.free * percent * ticker.last)
     logger.info("LOT: " + str(qty_lot))
 
     # 最大ポジション数設定
@@ -56,12 +48,33 @@ def channel_breakout_strategy(ticker, ohlcv, position, balance, strategy):
             logger.info("Waiting for OHLCV update...")
 
 
-strategy = Strategy(channel_breakout_strategy)
-strategy.settings.timeframe = '5m'
-strategy.settings.interval = 10
-strategy.settings.apiKey = settings.apiKey
-strategy.settings.secret = settings.secret
-strategy.testnet.use = True
-strategy.testnet.apiKey = settings.testnet_apiKey
-strategy.testnet.secret = settings.testnet_secret
-strategy.start()
+if __name__ == '__main__':
+    import argparse
+    from strategy import Strategy
+    import settings
+    import logging
+    import logging.config
+
+    strategy = Strategy(channel_breakout_strategy)
+    strategy.settings.timeframe = '5m'
+    strategy.settings.interval = 10
+    strategy.settings.apiKey = settings.apiKey
+    strategy.settings.secret = settings.secret
+    strategy.testnet.use = False
+    strategy.testnet.apiKey = settings.testnet_apiKey
+    strategy.testnet.secret = settings.testnet_secret
+
+    parser = strategy.add_arguments(argparse.ArgumentParser(description='Channel Breakout Bot'))
+    parser.add_argument('--parameter', nargs=3, type=int, default=[breakout_in, breakout_out])
+    parser.add_argument('--percent', type=float, default=percent)
+    args = parser.parse_args()
+
+    logging.config.dictConfig(
+        settings.loggingConf('chbrk-bot-' + args.symbol.replace('/','_').lower() + '.log'))
+    logger = logging.getLogger('ChbrkBot')
+
+    breakout_in = args.parameter[0]
+    breakout_out = args.parameter[1]
+    percent = args.percent
+
+    strategy.start(args)
