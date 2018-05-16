@@ -6,10 +6,10 @@ from numba import jit
 from indicator import *
 
 # テストデータ読み込み
-data = pd.read_csv('csv/bitmex_201801_1h.csv', index_col='timestamp', parse_dates=True)
+ohlcv = pd.read_csv('csv/bitmex_201801_1h.csv', index_col='timestamp', parse_dates=True)
 
 @jit
-def channel_breakout_backtest(ohlcv, breakout_in, breakout_out, rsiperiod, overBought, overSold, fastperiod, slowperiod, filterth, take_profit, stop_loss, trailing_stop, klot):
+def channel_breakout_backtest(breakout_in, breakout_out, rsiperiod, overBought, overSold, fastperiod, slowperiod, filterth, take_profit, stop_loss, trailing_stop, klot):
     ignore = int(max(breakout_in, breakout_out))
 
     # エントリー・エグジット
@@ -106,7 +106,6 @@ def channel_breakout_backtest(ohlcv, breakout_in, breakout_out, rsiperiod, overB
         lots=lots, spread=0, take_profit=take_profit, stop_loss=stop_loss, trailing_stop=trailing_stop, slippage=0)
 
 default_parameters = {
-    'ohlcv':data,
     'breakout_in':22,
     'breakout_out':22,
     'rsiperiod':0,

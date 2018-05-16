@@ -7,10 +7,10 @@ from numba import jit
 from indicator import *
 
 # テストデータ読み込み
-data = pd.read_csv('csv/bitmex_201801_1h.csv', index_col='timestamp', parse_dates=True)
+ohlcv = pd.read_csv('csv/bitmex_201801_1h.csv', index_col='timestamp', parse_dates=True)
 
 @jit
-def sar_backtest(ohlcv, start, inc, max):
+def sar_backtest(start, inc, max):
     # インジケーター作成
     vsar = sar(ohlcv.high, ohlcv.low, start, inc, max)
 
@@ -38,7 +38,6 @@ def sar_backtest(ohlcv, start, inc, max):
         lots=1, spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0)
 
 default_parameters = {
-    'ohlcv':data,
     'start':0.15,
     'inc':0.04,
     'max':0.34,

@@ -334,7 +334,6 @@ def BacktestIteration(testfunc, default_parameters, hyperopt_parameters, max_eva
         params.update(args)
         report = testfunc(**params)
         params.update(report.Total)
-        del params['ohlcv']
         if needs_header[0]:
             print(','.join(params.keys()))
         values = [str(x) for x in params.values()]
@@ -369,7 +368,6 @@ def BacktestIteration(testfunc, default_parameters, hyperopt_parameters, max_eva
     params.update(best)
     report = testfunc(**params)
     params.update(report.Total)
-    del params['ohlcv']
     values = [str(x) for x in params.values()]
     print(','.join(values))
 

@@ -7,10 +7,10 @@ from numba import jit
 from indicator import *
 
 # テストデータ読み込み
-data = pd.read_csv('csv/bitmex_201801_1h.csv', index_col='timestamp', parse_dates=True)
+ohlcv = pd.read_csv('csv/bitmex_201801_1h.csv', index_col='timestamp', parse_dates=True)
 
 @jit
-def pivot_backtest(ohlcv, leftbars, rightbars, trailing_stop=0):
+def pivot_backtest(leftbars, rightbars, trailing_stop=0):
 
     ignore = int(leftbars + rightbars)
 
@@ -62,7 +62,6 @@ def pivot_backtest(ohlcv, leftbars, rightbars, trailing_stop=0):
         lots=1, spread=0, trailing_stop=trailing_stop, slippage=0)
 
 default_parameters = {
-    'ohlcv':data,
     'leftbars':14,
     'rightbars':19,
     'trailing_stop':0,
