@@ -6,7 +6,7 @@ from numba import jit
 from indicator import *
 
 # テストデータ読み込み
-ohlcv = pd.read_csv('csv/bitmex_201801_1h.csv', index_col='timestamp', parse_dates=True)
+ohlcv = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
 
 @jit
 def channel_breakout_backtest(breakout_in, breakout_out, rsiperiod, overBought, overSold, fastperiod, slowperiod, filterth, take_profit, stop_loss, trailing_stop, klot):
@@ -103,11 +103,11 @@ def channel_breakout_backtest(breakout_in, breakout_out, rsiperiod, overBought, 
 
     return Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit,
         stop_buy_entry=long_entry_price, stop_sell_entry=short_entry_price, stop_buy_exit=long_exit_price, stop_sell_exit=short_exit_price,
-        lots=lots, spread=0, take_profit=take_profit, stop_loss=stop_loss, trailing_stop=trailing_stop, slippage=0)
+        lots=lots, spread=0, take_profit=take_profit, stop_loss=stop_loss, trailing_stop=trailing_stop, slippage=0, percent_of_equity=(1, 1000))
 
 default_parameters = {
-    'breakout_in':22,
-    'breakout_out':22,
+    'breakout_in':18,
+    'breakout_out':18,
     'rsiperiod':0,
     'overBought':79,
     'overSold':29,
@@ -135,4 +135,4 @@ hyperopt_parameters = {
     # 'klot': hp.loguniform('klot', 1, 10),
 }
 
-BacktestIteration(channel_breakout_backtest, default_parameters, hyperopt_parameters, 500)
+BacktestIteration(channel_breakout_backtest, default_parameters, hyperopt_parameters, 0)

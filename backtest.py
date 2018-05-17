@@ -9,10 +9,20 @@ from hyperopt import hp, tpe, Trials, fmin, rand, anneal
 # https://qiita.com/toyolab/items/e8292d2f051a88517cb2 より
 
 @jit
+def calclots(capital, price, percent, lot):
+    if percent > 0:
+        if capital > 0:
+            return ((capital * percent) / price)
+        else:
+            return 0
+    else:
+        return lot
+
+@jit
 def Backtest(ohlc,
     buy_entry=None, sell_entry=None, buy_exit=None, sell_exit=None,
     stop_buy_entry=None, stop_sell_entry=None, stop_buy_exit=None, stop_sell_exit=None,
-    lots=0.1, spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0):
+    lots=0.1, spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0, percent_of_equity=(0, 0)):
     Open = ohlc.open.values #始値
     Low = ohlc.low.values #安値
     High = ohlc.high.values #高値
@@ -24,7 +34,9 @@ def Backtest(ohlc,
     buyExecLot = sellExecLot = 0
 
     LongTrade = np.zeros(N) # 買いトレード情報
+    LongTradeLots = np.zeros(N) # 買いトレード情報
     ShortTrade = np.zeros(N) # 売りトレード情報
+    ShortTradeLots = np.zeros(N) # 売りトレード情報
 
     LongPL = np.zeros(N) # 買いポジションの損益
     ShortPL = np.zeros(N) # 売りポジションの損益
@@ -49,6 +61,9 @@ def Backtest(ohlc,
     stop_sell_entry = place_holder if stop_sell_entry is None else stop_sell_entry.values
     stop_buy_exit = place_holder if stop_buy_exit is None else stop_buy_exit.values
     stop_sell_exit = place_holder if stop_sell_exit is None else stop_sell_exit.values
+
+    percent = percent_of_equity[0]
+    capital = percent_of_equity[1]
 
     #
     # 1.シグナルが出た次の足の始値で成行
@@ -78,7 +93,7 @@ def Backtest(ohlc,
             if OpenPrice > 0:
                 buyExecPrice = OpenPrice + spread + slippage
                 LongTrade[i] = buyExecPrice #買いポジションオープン
-                buyExecLot = lots[i]
+                buyExecLot =  calclots(capital, OpenPrice, percent, lots[i])
                 BuyNow = True
         else:
             ClosePrice = 0
@@ -98,6 +113,7 @@ def Backtest(ohlc,
             if ClosePrice > 0:
                 ClosePrice = ClosePrice - slippage
                 LongTrade[i] = -ClosePrice #買いポジションクローズ
+                LongTradeLots[i] = buyExecLot
                 LongPL[i] = (ClosePrice - buyExecPrice) * buyExecLot #損益確定
                 buyExecPrice = buyExecLot = 0
 
@@ -120,7 +136,7 @@ def Backtest(ohlc,
             if OpenPrice:
                 sellExecPrice = OpenPrice - slippage
                 ShortTrade[i] = sellExecPrice #売りポジションオープン
-                sellExecLot = lots[i]
+                sellExecLot = calclots(capital, OpenPrice, percent, lots[i])
                 SellNow = True
         else:
             ClosePrice = 0
@@ -140,6 +156,7 @@ def Backtest(ohlc,
             if ClosePrice > 0:
                 ClosePrice = ClosePrice + spread + slippage
                 ShortTrade[i] = -ClosePrice #売りポジションクローズ
+                ShortTradeLots[i] = sellExecLot
                 ShortPL[i] = (sellExecPrice - ClosePrice) * sellExecLot #損益確定
                 sellExecPrice = sellExecLot = 0
 
@@ -158,6 +175,7 @@ def Backtest(ohlc,
                     ClosePrice = LimitPrice - slippage
             if ClosePrice > 0:
                 LongTrade[i] = -ClosePrice #買いポジションクローズ
+                LongTradeLots[i] = buyExecLot
                 LongPL[i] = (ClosePrice - buyExecPrice) * buyExecLot #損益確定
                 buyExecPrice = buyExecLot = 0
 
@@ -175,17 +193,22 @@ def Backtest(ohlc,
                     ClosePrice = LimitPrice + slippage
             if ClosePrice > 0:
                 ShortTrade[i] = -ClosePrice #売りポジションクローズ
+                ShortTradeLots[i] = sellExecLot
                 ShortPL[i] = (sellExecPrice - ClosePrice) * sellExecLot #損益確定
                 sellExecPrice = sellExecLot = 0
+
+        capital = capital + ShortPL[i] + LongPL[i]
 
     # ポジションクローズ
     if buyExecPrice > 0:
         ClosePrice = Close[N-1]
         LongTrade[N-1] = -ClosePrice #買いポジションクローズ
+        LongTradeLots[N-1] = buyExecLot
         LongPL[N-1] = (ClosePrice - buyExecPrice) * buyExecLot #損益確定
     if sellExecPrice > 0:
         ClosePrice = Close[N-1]
         ShortTrade[N-1] = -ClosePrice #売りポジションクローズ
+        ShortTradeLots[N-1] = sellExecLot
         ShortPL[N-1] = (sellExecPrice - ClosePrice) * sellExecLot #損益確定
 
     return BacktestReport(

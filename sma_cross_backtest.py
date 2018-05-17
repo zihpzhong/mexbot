@@ -9,7 +9,7 @@ from indicator import *
 
 # テストデータ読み込み
 ohlcv = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
-ohlcv = ohlcv[datetime(2018, 5, 1):]
+#ohlcv = ohlcv[datetime(2018, 5, 1):]
 
 @jit
 def sma_cross_backtest(fastlen, slowlen, filterlen, buyfilterth, sellfilterth, rsiperiod, overBought, overSold):
@@ -59,7 +59,7 @@ def sma_cross_backtest(fastlen, slowlen, filterlen, buyfilterth, sellfilterth, r
 
     report = Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit,
         stop_buy_entry=long_entry_price, stop_sell_entry=short_entry_price, stop_buy_exit=long_exit_price, stop_sell_exit=short_exit_price,
-        lots=1, spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0)
+        lots=1, spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0, percent_of_equity=(1, 1000))
     report.Total.shortProfit = report.Short.Profit
     report.Total.longProfit = report.Long.Profit
     return report

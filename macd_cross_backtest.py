@@ -51,6 +51,8 @@ def macd_cross_backtest(fastlen, slowlen, siglen, smafastlen, smaslowlen, use_sm
     short_entry[:ignore] = False
     short_exit[:ignore] = False
 
+    lots = (1000 / ohlcv.close)
+
     # entry_exit = pd.DataFrame({'close':ohlcv.close, 'macd':vmacd, 'sig':vsig,
     #     'long_entry_price':long_entry_price, 'long_exit_price':long_exit_price, 'long_entry':long_entry, 'long_exit':long_exit,
     #     'short_entry_price':short_entry_price, 'short_entry':short_entry, 'short_exit_price':short_exit_price, 'short_exit':short_exit})#, index=ohlcv.index)
@@ -58,7 +60,7 @@ def macd_cross_backtest(fastlen, slowlen, siglen, smafastlen, smaslowlen, use_sm
 
     report = Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit,
         stop_buy_entry=long_entry_price, stop_sell_entry=short_entry_price, stop_buy_exit=long_exit_price, stop_sell_exit=short_exit_price,
-        lots=1, spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0)
+        lots=lots, spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0, percent_of_equity=(1, 740))
     return report
 
 default_parameters = {
@@ -78,4 +80,4 @@ hyperopt_parameters = {
     # 'smaslowlen': hp.quniform('smaslowlen', 1, 50, 1),
 }
 
-BacktestIteration(macd_cross_backtest, default_parameters, hyperopt_parameters, 1000)
+BacktestIteration(macd_cross_backtest, default_parameters, hyperopt_parameters, 0)
