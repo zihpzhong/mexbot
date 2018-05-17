@@ -7,15 +7,40 @@ from hyperopt import hp
 from numba import jit
 from indicator import *
 from functools import lru_cache
+from functools import wraps
+import redis
+import pickle
 
-# テストデータ読み込み
-ohlcv = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
-#ohlcv = ohlcv[datetime(2018, 2, 1):]
+r = redis.StrictRedis(host='localhost', port=6379, db=0)
+
+def redis_cache(r):
+    def _redis_cache(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            k = str(func)+str(args)+str(kwargs)
+            v = r.get(k)
+            if v is None:
+                v = func(*args, **kwargs)
+                r.set(k, pickle.dumps(v))
+            else:
+                v = pickle.loads(v)
+            return v
+        return wrapper
+    return _redis_cache
+
+#@redis_cache(r)
+def read_ohlc(filename):
+    return pd.read_csv(filename, index_col='timestamp', parse_dates=True)
+
+ohlcv = read_ohlc('csv/bitmex_2018_1h.csv')
 
 @lru_cache(maxsize=32)
+#@redis_cache(r)
 def cached_sma(period):
     return ohlcv.close.rolling(int(period)).mean()
 
+@lru_cache(maxsize=32)
+#@redis_cache(r)
 def cached_macd(fastlen, slowlen, siglen):
     macd = cached_sma(fastlen) - cached_sma(slowlen)
     signal = macd.rolling(int(siglen)).mean()
@@ -69,15 +94,15 @@ default_parameters = {
     'siglen':13,
     'smafastlen':22,
     'smaslowlen':26,
-    'use_sma':False,
+    'use_sma':True,
 }
 
 hyperopt_parameters = {
     'fastlen': hp.quniform('fastlen', 1, 50, 1),
     'slowlen': hp.quniform('slowlen', 1, 50, 1),
     'siglen': hp.quniform('siglen', 1, 50, 1),
-    # 'smafastlen': hp.quniform('smafastlen', 1, 50, 1),
-    # 'smaslowlen': hp.quniform('smaslowlen', 1, 50, 1),
+    'smafastlen': hp.quniform('smafastlen', 1, 50, 1),
+    'smaslowlen': hp.quniform('smaslowlen', 1, 50, 1),
 }
 
-BacktestIteration(macd_cross_backtest, default_parameters, hyperopt_parameters, 0)
+BacktestIteration(macd_cross_backtest, default_parameters, hyperopt_parameters, 1000)
