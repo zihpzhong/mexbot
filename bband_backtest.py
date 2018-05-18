@@ -7,10 +7,10 @@ from numba import jit
 from indicator import *
 
 # テストデータ読み込み
-data = pd.read_csv('csv/bitmex_201804_5m.csv', index_col='timestamp', parse_dates=True)
+ohlcv = pd.read_csv('csv/bitmex_201804_5m.csv', index_col='timestamp', parse_dates=True)
 
 @jit
-def bband_backtest(ohlcv, length, multi):
+def bband_backtest(length, multi):
     ignore = int(length)
 
     # インジケーター作成
@@ -57,7 +57,6 @@ def bband_backtest(ohlcv, length, multi):
         lots=1, spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0)
 
 default_parameters = {
-    'ohlcv':data,
     'length':20,
     'multi':2,
 }
