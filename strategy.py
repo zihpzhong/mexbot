@@ -107,9 +107,14 @@ class Strategy:
     def fetch_ticker(self, symbol=None, timeframe=None):
         symbol = symbol or self.settings.symbol
         timeframe = timeframe or self.settings.timeframe
-        ticker = dotdict(self.exchange.fetch_ticker(symbol, params={'binSize': self.resampleInfo[timeframe]['binSize']}))
-        ticker.datetime = pd.to_datetime(ticker.datetime)
-        self.logger.info("TICK: ohlc {open} {high} {low} {close} bid {bid} ask {ask}".format(**ticker))
+        book = self.exchange.fetch_order_book(symbol, limit=1)
+        trade = self.exchange.fetch_trades(symbol, limit=1, params={'reverse':True})
+        ticker = dotdict()
+        ticker.bid = book['bids'][0][0]
+        ticker.ask = book['asks'][0][0]
+        ticker.last = trade[0]['price']
+        ticker.datetime = pd.to_datetime(trade[0]['datetime'])
+        self.logger.info("TICK: bid {bid} ask {ask} last {last}".format(**ticker))
         return ticker
 
     def fetch_ohlcv(self, symbol=None, timeframe=None):
