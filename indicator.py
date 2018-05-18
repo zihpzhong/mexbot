@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 import numpy as np
+from functools import lru_cache
 
 def sma(source, period):
     return source.rolling(int(period)).mean()
@@ -200,6 +201,21 @@ def maximum(a, b, period):
     c = a.copy()
     c[a < b] = b
     return c.rolling(int(period)).max()
+
+@lru_cache(maxsize=None)
+def fib(n):
+    n = int(n)
+    fib = [0] * n
+    fib[1] = 1
+    for i in range(2, n):
+        fib[i] = fib[i-2] + fib[i-1]
+    return pd.Series(fib)
+
+@lru_cache(maxsize=None)
+def fibratio(n):
+    n = int(n)
+    f = fib(n)
+    return f / f.iat[n-1]
 
 if __name__ == '__main__':
 
