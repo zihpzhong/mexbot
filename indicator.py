@@ -38,7 +38,7 @@ def stoch(close, high, low, period):
     return 100 * (close - lline) / (hline - lline)
 
 def momentum(source, period):
-    return source.diff(int(period))
+    return source / source.shift(period)
 
 def bband(source, period, mult=2.0):
     period = int(period)
@@ -217,6 +217,47 @@ def fibratio(n):
     f = fib(n)
     return f / f.iat[n-1]
 
+def rci(source, period):
+    """
+    ord(seq, idx, itv) =>
+        p = seq[idx]
+        o = 1
+        for i = 0 to itv - 1
+            if p < seq[i]
+                o := o + 1
+        o
+    d(itv) =>
+        sum = 0.0
+        for i = 0 to itv - 1
+            sum := sum + pow((i + 1) - ord(src, i, itv), 2)
+        sum
+
+    rci(itv) => (1.0 - 6.0 * d(itv) / (itv * (itv * itv - 1.0))) * 100.0
+    """
+    period = int(period)
+    v = source.values
+    n = len(v)
+    rci = np.zeros(n)
+
+    rank_index = np.array(range(1, period+1))
+    def d1(isrc):
+        rank_value = np.argsort(v[isrc-period:isrc])
+        return np.sum((rank_index - rank_value) ** 2)
+
+    def d2(isrc):
+        r = 0
+        ord = np.argsort(v[isrc-period:isrc])
+        for i in range(0, period):
+            r = r + (i + 1 - ord[i]) ** 2
+        return r
+
+    d = d1
+    k = (period * (period ** 2 - 1))
+    for i in range(period, n):
+        rci[i] = ((1.0 - (6.0 * d(i)) / k)) * 100.0
+
+    return pd.Series(rci, index=source.index)
+
 if __name__ == '__main__':
 
     from functools import wraps
@@ -259,6 +300,7 @@ if __name__ == '__main__':
     sar = stop_watch(sar)
     minimum = stop_watch(minimum)
     maximum = stop_watch(maximum)
+    rci = stop_watch(rci)
 
     vsma = sma(ohlc.close, 10)
     vema = ema(ohlc.close, 10)
@@ -276,6 +318,7 @@ if __name__ == '__main__':
     vsar = sar(ohlc.high, ohlc.low, 0.02, 0.02, 0.2)
     vmin = minimum(ohlc.open, ohlc.close, 14)
     vmax = maximum(ohlc.open, ohlc.close, 14)
+    vrci = rci(ohlc.open, 14)
     df = pd.DataFrame({
         'high':ohlc.high,
         'low':ohlc.low,
@@ -301,5 +344,6 @@ if __name__ == '__main__':
         'sar':vsar,
         'min':vmin,
         'max':vmax,
+        'rci':vrci,
         }, index=ohlc.index)
     print(df.to_csv())

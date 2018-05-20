@@ -1,27 +1,29 @@
 # -*- coding: utf-8 -*-
 from indicator import *
 
-# ロット計算用資産比
-percent = 0.3
+# ロット制御パラメータ
+baselot = 200
+klot = 238
 
-# ブレイクアウト期間
+# ブレイクアウトエントリー期間
 breakout_in = 22
-breakout_out = 6
+breakout_out = 5
 
 def channel_breakout_strategy(ticker, ohlcv, position, balance, strategy):
 
     # エントリー/エグジット
     long_entry_price = last(highest(ohlcv.high, breakout_in)) + 0.5
     short_entry_price = last(lowest(ohlcv.low, breakout_in)) - 0.5
-
     long_exit_price = last(lowest(ohlcv.low, breakout_out)) - 0.5
     short_exit_price = last(highest(ohlcv.high, breakout_out)) + 0.5
 
-    sma_filter = last(sma(ohlcv.close, 25))
-    close = last(ohlcv.close)
-
     # ロット数計算
-    qty_lot = int(balance.BTC.free * percent * ticker.last)
+    fastsma = last(sma(ohlcv.close, 13))
+    slowsma = last(sma(ohlcv.close, 26))
+    lots = (1 - abs(fastsma / slowsma))
+    lots = (1 - lots * klot)
+    lots = max(min(lots, 1.0), 0.1)
+    qty_lot = int(lots * baselot)
     logger.info("LOT: " + str(qty_lot))
 
     # 最大ポジション数設定
@@ -29,21 +31,25 @@ def channel_breakout_strategy(ticker, ohlcv, position, balance, strategy):
 
     # 注文
     if position.currentQty > 0:
-        strategy.order('L_exit', side='sell', qty=position.currentQty, limit=min(long_exit_price, ticker.ask), stop=long_exit_price)
+        if long_exit_price <= short_entry_price:
+            qty = position.currentQty + qty_lot
+        else:
+            qty = position.currentQty
+        strategy.order('L_exit', side='sell', qty=qty, limit=min(long_exit_price, ticker.ask), stop=long_exit_price)
+        strategy.cancel('S')
         strategy.ohlcv_updated = False
     elif position.currentQty < 0:
-        strategy.order('S_exit', side='buy', qty=-position.currentQty, limit=max(short_exit_price, ticker.bid), stop=short_exit_price)
+        if short_exit_price >= long_entry_price:
+            qty = -position.currentQty + qty_lot
+        else:
+            qty = -position.currentQty
+        strategy.order('S_exit', side='buy', qty=qty, limit=max(short_exit_price, ticker.bid), stop=short_exit_price)
+        strategy.cancel('L')
         strategy.ohlcv_updated = False
     else:
         if strategy.ohlcv_updated:
-            if close > sma_filter:
-                logger.info("Filter: " + str(close) + " > " + str(sma_filter))
-                strategy.order('L', 'buy', qty=qty_lot, limit=max(long_entry_price, ticker.bid), stop=long_entry_price)
-                strategy.cancel('S')
-            if close < sma_filter:
-                logger.info("Filter: " + str(close) + " < " + str(sma_filter))
-                strategy.order('S', 'sell', qty=qty_lot, limit=min(short_entry_price, ticker.ask), stop=short_entry_price)
-                strategy.cancel('L')
+            strategy.order('L', 'buy', qty=qty_lot, limit=max(long_entry_price, ticker.bid), stop=long_entry_price)
+            strategy.order('S', 'sell', qty=qty_lot, limit=min(short_entry_price, ticker.ask), stop=short_entry_price)
         else:
             logger.info("Waiting for OHLCV update...")
 
