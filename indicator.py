@@ -258,6 +258,19 @@ def rci(source, period):
 
     return pd.Series(rci, index=source.index)
 
+def polyfline(source, period, deg=2):
+    period = int(period)
+    deg = int(deg)
+    v = source.values
+    n = len(v)
+    x = np.linspace(0, period-1, period)
+    poly = np.zeros(n)
+    for i in range(period, n):
+        p = np.poly1d(np.polyfit(x, v[i-period:i], deg))
+        poly[i] = p(period-1)
+    return pd.Series(poly, index=source.index)
+
+
 if __name__ == '__main__':
 
     from functools import wraps
@@ -301,6 +314,7 @@ if __name__ == '__main__':
     minimum = stop_watch(minimum)
     maximum = stop_watch(maximum)
     rci = stop_watch(rci)
+    polyfline = stop_watch(polyfline)
 
     vsma = sma(ohlc.close, 10)
     vema = ema(ohlc.close, 10)
@@ -319,6 +333,7 @@ if __name__ == '__main__':
     vmin = minimum(ohlc.open, ohlc.close, 14)
     vmax = maximum(ohlc.open, ohlc.close, 14)
     vrci = rci(ohlc.open, 14)
+    vply = polyfline(ohlc.open, 14)
     df = pd.DataFrame({
         'high':ohlc.high,
         'low':ohlc.low,
@@ -345,5 +360,6 @@ if __name__ == '__main__':
         'min':vmin,
         'max':vmax,
         'rci':vrci,
+        'polyfit':vply,
         }, index=ohlc.index)
     print(df.to_csv())
