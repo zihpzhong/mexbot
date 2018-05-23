@@ -2,6 +2,32 @@
 import pandas as pd
 import numpy as np
 from functools import lru_cache
+from numba import jit, b1, f8, i8, void
+
+@jit(void(f8[:],i8,i8,f8[:]),nopython=True)
+def fast_sma_core(v, n, p, r):
+    sum = 0
+    wp = 0
+    q = np.empty(p)
+    for i in range(p):
+        r[i] = np.nan
+        q[i] = v[i]
+        sum = sum + q[i]
+    for i in range(p,n):
+        r[i-1] = sum / p
+        sum = sum - q[wp]
+        q[wp] = v[i]
+        sum = sum + q[wp]
+        wp = (wp + 1) % p
+    r[n-1] = sum / p
+
+def fastsma(source, period):
+    v = source.values
+    n = len(v)
+    p = int(period)
+    r = np.empty(n)
+    fast_sma_core(v,n,period,r)
+    return pd.Series(r, index=source.index)
 
 def sma(source, period):
     return source.rolling(int(period)).mean()
@@ -157,6 +183,9 @@ def last(source, period=0):
     """
     return source.iat[-1-int(period)]
 
+def change(source, length=1):
+    return source.diff(length).fillna(0)
+
 def pivothigh(source, leftbars, rightbars):
     leftbars = int(leftbars)
     rightbars = int(rightbars)
@@ -172,6 +201,42 @@ def pivotlow(source, leftbars, rightbars):
     diff = low.diff()
     pvlo = pd.Series(low[diff <= 0], index=source.index)
     return pvlo.shift(rightbars) if rightbars > 0 else pvlo
+
+@jit(void(f8[:],f8[:],i8,f8,f8,f8,f8[:]),nopython=True)
+def fast_sar_core(high, low, n, start, inc, max, sar):
+    sar[0] = low[0]
+    ep = high[0]
+    acc = start
+    long = True
+    for i in range(1, n):
+        sar[i] = sar[i-1] + acc * (ep - sar[i-1])
+        if long:
+            if high[i] > ep:
+                ep = high[i]
+                if acc < max:
+                    acc += inc
+            if sar[i] > low[i]:
+                long = False
+                acc = start
+                sar[i] = ep
+        else:
+            if low[i] < ep:
+                ep = low[i]
+                if acc < max:
+                    acc += inc
+            if sar[i] < high[i]:
+                long = True
+                acc = start
+                sar[i] = ep
+
+def fastsar(high, low, start, inc, max):
+    index = high.index
+    high = high.values
+    low = low.values
+    n = len(high)
+    sar = np.empty(n)
+    fast_sar_core(high, low, n, start, inc, max, sar)
+    return pd.Series(sar, index=index)
 
 def sar(high, low, start, inc, max):
     index = high.index
@@ -301,6 +366,7 @@ if __name__ == '__main__':
 
     ohlc = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
 
+    fastsma = stop_watch(fastsma)
     sma = stop_watch(sma)
     dsma = stop_watch(dsma)
     ema = stop_watch(ema)
@@ -317,13 +383,14 @@ if __name__ == '__main__':
     atr = stop_watch(atr)
     pivothigh = stop_watch(pivothigh)
     pivotlow = stop_watch(pivotlow)
-    pivotlow = stop_watch(pivotlow)
     sar = stop_watch(sar)
+    fastsar = stop_watch(fastsar)
     minimum = stop_watch(minimum)
     maximum = stop_watch(maximum)
     rci = stop_watch(rci)
     polyfline = stop_watch(polyfline)
 
+    vfastsma = fastsma(ohlc.close, 10)
     vsma = sma(ohlc.close, 10)
     vdsma = dsma(ohlc.close, 10)
     vema = ema(ohlc.close, 10)
@@ -341,6 +408,7 @@ if __name__ == '__main__':
     vpivoth = pivothigh(ohlc.high, 4, 2).ffill()
     vpivotl = pivotlow(ohlc.low, 4, 2).ffill()
     vsar = sar(ohlc.high, ohlc.low, 0.02, 0.02, 0.2)
+    vfastsar = fastsar(ohlc.high, ohlc.low, 0.02, 0.02, 0.2)
     vmin = minimum(ohlc.open, ohlc.close, 14)
     vmax = maximum(ohlc.open, ohlc.close, 14)
     vrci = rci(ohlc.open, 14)
@@ -349,6 +417,7 @@ if __name__ == '__main__':
         'high':ohlc.high,
         'low':ohlc.low,
         'close':ohlc.close,
+        'fastsma':vfastsma,
         'sma':vsma,
         'dsma':vdsma,
         'ema':vema,
@@ -371,6 +440,7 @@ if __name__ == '__main__':
         'pivot high':vpivoth,
         'pivot low':vpivotl,
         'sar':vsar,
+        'fastsar':vfastsar,
         'min':vmin,
         'max':vmax,
         'rci':vrci,

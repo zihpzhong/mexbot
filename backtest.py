@@ -297,8 +297,8 @@ class BacktestReport:
         self.Total.LossAverage = self.Total.GrossLoss / self.Total.LossTrades if self.Total.LossTrades > 0 else 0
         self.Total.Profit = self.Total.GrossProfit + self.Total.GrossLoss
         self.Total.DrawDown = (self.Equity.cummax() - self.Equity).max()
-        self.Total.ProfitFactor = self.Total.GrossProfit / -self.Total.GrossLoss if -self.Total.GrossLoss > 0 else self.Total.GrossProfit
-        self.Total.RecoveryFactor = self.Total.ProfitFactor / self.Total.DrawDown if self.Total.DrawDown > 0 else self.Total.ProfitFactor
+        self.Total.ProfitFactor = self.Total.GrossProfit / -self.Total.GrossLoss if -self.Total.GrossLoss > 0 else 0
+        self.Total.RecoveryFactor = self.Total.ProfitFactor / self.Total.DrawDown if self.Total.DrawDown > 0 else 0
         self.Total.ExpectedProfit = (self.Total.WinAverage * self.Total.WinRatio) + ((1 - self.Total.WinRatio) * self.Total.LossAverage)
         self.Total.ExpectedValue = (self.Total.WinRatio * (self.Total.WinAverage / abs(self.Total.LossAverage))) - (1 - self.Total.WinRatio) if self.Total.LossAverage < 0 else 1
 
