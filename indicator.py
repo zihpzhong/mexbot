@@ -6,9 +6,22 @@ from functools import lru_cache
 def sma(source, period):
     return source.rolling(int(period)).mean()
 
+def dsma(source, period):
+    sma = source.rolling(int(period)).mean()
+    return (sma * 2) - sma.rolling(int(period)).mean()
+
 def ema(source, period):
     # alpha = 2.0 / (period + 1)
     return source.ewm(span=period).mean()
+
+def dema(source, period):
+    ema = source.ewm(span=period).mean()
+    return (ema * 2) - ema.ewm(span=period).mean()
+
+def tema(source, period):
+    ema = source.ewm(span=period).mean()
+    ema2 = ema.ewm(span=period).mean()
+    return (ema * 3) - (ema2 * 3) + ema2.ewm(span=period).mean()
 
 def rma(source, period):
     alpha = 1.0 / (period)
@@ -165,7 +178,7 @@ def sar(high, low, start, inc, max):
     high = high.values
     low = low.values
     n = len(high)
-    sar = np.zeros(n)
+    sar = np.empty(n)
     sar[0] = low[0]
     ep = high[0]
     acc = start
@@ -237,7 +250,9 @@ def rci(source, period):
     period = int(period)
     v = source.values
     n = len(v)
-    rci = np.zeros(n)
+    rci = np.empty(n)
+    for i in range(0, period):
+        rci[i] = np.nan
 
     rank_index = np.array(range(1, period+1))
     def d1(isrc):
@@ -264,7 +279,9 @@ def polyfline(source, period, deg=2):
     v = source.values
     n = len(v)
     x = np.linspace(0, period-1, period)
-    poly = np.zeros(n)
+    poly = np.empty(n)
+    for i in range(0, period):
+        poly[i] = np.nan
     for i in range(period, n):
         p = np.poly1d(np.polyfit(x, v[i-period:i], deg))
         poly[i] = p(period-1)
@@ -285,7 +302,10 @@ if __name__ == '__main__':
     ohlc = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
 
     sma = stop_watch(sma)
+    dsma = stop_watch(dsma)
     ema = stop_watch(ema)
+    dema = stop_watch(dema)
+    tema = stop_watch(tema)
     rma = stop_watch(rma)
     rsi = stop_watch(rsi)
     stoch = stop_watch(stoch)
@@ -305,7 +325,10 @@ if __name__ == '__main__':
     polyfline = stop_watch(polyfline)
 
     vsma = sma(ohlc.close, 10)
+    vdsma = dsma(ohlc.close, 10)
     vema = ema(ohlc.close, 10)
+    vdema = dema(ohlc.close, 10)
+    vtema = tema(ohlc.close, 10)
     vrma = rma(ohlc.close, 10)
     vrsi = rsi(ohlc.close, 14)
     vstoch = stoch(vrsi, vrsi, vrsi, 14)
@@ -327,7 +350,10 @@ if __name__ == '__main__':
         'low':ohlc.low,
         'close':ohlc.close,
         'sma':vsma,
+        'dsma':vdsma,
         'ema':vema,
+        'dema':vdema,
+        'tema':vtema,
         'rma':vrma,
         'rsi':vrsi,
         'stochrsi':vstoch,
