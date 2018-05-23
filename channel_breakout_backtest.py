@@ -2,13 +2,11 @@ import pandas as pd
 import numpy as np
 from backtest import Backtest, BacktestReport, BacktestIteration
 from hyperopt import hp
-from numba import jit
 from indicator import *
 
 # テストデータ読み込み
 ohlcv = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
 
-@jit
 def channel_breakout_backtest(breakout_in, breakout_out, rsiperiod, overBought, overSold, fastperiod, slowperiod, filterth, take_profit, stop_loss, trailing_stop, klot):
     ignore = int(max(breakout_in, breakout_out))
 

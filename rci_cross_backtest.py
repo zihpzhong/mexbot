@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 from backtest import Backtest, BacktestReport, BacktestIteration
 from hyperopt import hp
-from numba import jit
 from indicator import *
 from functools import lru_cache
 
@@ -14,7 +13,6 @@ ohlcv = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates
 def cached_rci(period):
     return rci(ohlcv.close, period)
 
-@jit
 def rci_cross_backtest(fastlen, slowlen):
 
     # インジケーター作成

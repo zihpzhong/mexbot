@@ -4,14 +4,12 @@ import numpy as np
 from datetime import datetime
 from backtest import Backtest, BacktestReport, BacktestIteration
 from hyperopt import hp
-from numba import jit
 from indicator import *
 
 # テストデータ読み込み
 ohlcv = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
 #ohlcv = ohlcv[datetime(2018, 5, 1):]
 
-@jit
 def sma_cross_backtest(fastlen, slowlen, filterlen, buyfilterth, sellfilterth, rsiperiod, overBought, overSold):
 
     # インジケーター作成

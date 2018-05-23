@@ -4,7 +4,6 @@ import numpy as np
 from backtest import Backtest, BacktestReport, BacktestIteration
 from hyperopt import hp
 from numba import jit
-from indicator import *
 from functools import lru_cache
 
 # テストデータ読み込み
@@ -14,7 +13,6 @@ ohlcv = pd.read_csv('csv/bitmex_201805_1m.csv', index_col='timestamp', parse_dat
 def cached_rsi(period):
     return rsi(ohlcv.close, period)
 
-@jit
 def rsi_backtest(rsilength, overBought, overSold, take_profit, stop_loss, trailing_stop):
 
     # インジケーター作成

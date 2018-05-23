@@ -7,10 +7,8 @@ import numpy as np
 from datetime import datetime
 from backtest import Backtest, BacktestReport, BacktestIteration
 from hyperopt import hp
-from numba import jit
 from indicator import *
-from functools import lru_cache
-from functools import wraps
+from functools import lru_cache, wraps
 import redis
 import pickle
 
@@ -64,7 +62,6 @@ def cached_macd(fastlen, slowlen, siglen):
     signal = macd.rolling(int(siglen)).mean()
     return (macd, signal, macd-signal)
 
-@jit
 def macd_cross_backtest(fastlen, slowlen, siglen, smafastlen, smaslowlen, use_sma):
 
     # インジケーター作成
