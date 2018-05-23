@@ -273,19 +273,7 @@ def polyfline(source, period, deg=2):
 
 if __name__ == '__main__':
 
-    from functools import wraps
-    import time
-    def stop_watch(func) :
-        @wraps(func)
-        def wrapper(*args, **kargs) :
-            start = time.time()
-            result = func(*args,**kargs)
-            process_time =  (time.time() - start)*10000
-            print(f"{func.__name__} は {process_time:.3f} ミリ秒かかりました")
-            return result
-        return wrapper
-
-    # import numpy as np
+    from utils import stop_watch
 
     # p0 = 8000 #初期値
     # vola = 15.0 #ボラティリティ(%)

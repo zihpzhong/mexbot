@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 import pandas as pd
-from numba import jit
+from numba import jit, b1, f8, i8, void
 from utils import dotdict
 from hyperopt import hp, tpe, Trials, fmin, rand, anneal
 
 # PythonでFXシストレのバックテスト(1)
 # https://qiita.com/toyolab/items/e8292d2f051a88517cb2 より
 
-@jit
+@jit(f8(f8,f8,f8,f8),nopython=True)
 def calclots(capital, price, percent, lot):
     if percent > 0:
         if capital > 0:
@@ -18,52 +18,22 @@ def calclots(capital, price, percent, lot):
     else:
         return lot
 
-@jit
-def Backtest(ohlc,
-    buy_entry=None, sell_entry=None, buy_exit=None, sell_exit=None,
-    stop_buy_entry=None, stop_sell_entry=None, stop_buy_exit=None, stop_sell_exit=None,
-    lots=0.1, spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0, percent_of_equity=(0, 0)):
-    Open = ohlc.open.values #始値
-    Low = ohlc.low.values #安値
-    High = ohlc.high.values #高値
-    Close = ohlc.close.values #始値
+@jit(void(f8[:],f8[:],f8[:],f8[:],i8,
+    b1[:],b1[:],b1[:],b1[:],
+    f8[:],f8[:],f8[:],f8[:],
+    f8[:],
+    f8,f8,f8,f8,f8,f8,f8,
+    f8[:],f8[:],f8[:],f8[:]), nopython=True)
+def BacktestCore(Open, High, Low, Close, N,
+    buy_entry, sell_entry, buy_exit, sell_exit,
+    stop_buy_entry, stop_sell_entry, stop_buy_exit, stop_sell_exit,
+    lots,
+    spread, take_profit, stop_loss, trailing_stop, slippage, percent, capital,
+    LongTrade, LongPL, ShortTrade, ShortPL):
 
-    N = len(ohlc) #データサイズ
     buyExecPrice = sellExecPrice = 0.0 # 売買価格
     buyStopEntry = buyStopExit = sellStopEntry = sellStopExit = 0
     buyExecLot = sellExecLot = 0
-
-    LongTrade = np.zeros(N) # 買いトレード情報
-    LongTradeLots = np.zeros(N) # 買いトレード情報
-    ShortTrade = np.zeros(N) # 売りトレード情報
-    ShortTradeLots = np.zeros(N) # 売りトレード情報
-
-    LongPL = np.zeros(N) # 買いポジションの損益
-    ShortPL = np.zeros(N) # 売りポジションの損益
-
-    place_holder = np.zeros(N) # プレースホルダ
-    if isinstance(lots, pd.Series):
-        lots = lots.values
-    else:
-        lots = np.full(shape=(N), fill_value=lots)
-
-    buy_entry = place_holder if buy_entry is None else buy_entry.values
-    sell_entry = place_holder if sell_entry is None else sell_entry.values
-    buy_exit = place_holder if buy_exit is None else buy_exit.values
-    sell_exit = place_holder if sell_exit is None else sell_exit.values
-
-    # トレーリングストップ価格を設定(STOP注文として処理する)
-    if trailing_stop > 0:
-        stop_buy_exit = ohlc.high - trailing_stop
-        stop_sell_exit = ohlc.low + trailing_stop
-
-    stop_buy_entry = place_holder if stop_buy_entry is None else stop_buy_entry.values
-    stop_sell_entry = place_holder if stop_sell_entry is None else stop_sell_entry.values
-    stop_buy_exit = place_holder if stop_buy_exit is None else stop_buy_exit.values
-    stop_sell_exit = place_holder if stop_sell_exit is None else stop_sell_exit.values
-
-    percent = percent_of_equity[0]
-    capital = percent_of_equity[1]
 
     #
     # 1.シグナルが出た次の足の始値で成行
@@ -113,7 +83,6 @@ def Backtest(ohlc,
             if ClosePrice > 0:
                 ClosePrice = ClosePrice - slippage
                 LongTrade[i] = -ClosePrice #買いポジションクローズ
-                LongTradeLots[i] = buyExecLot
                 LongPL[i] = (ClosePrice - buyExecPrice) * buyExecLot #損益確定
                 buyExecPrice = buyExecLot = 0
 
@@ -156,7 +125,6 @@ def Backtest(ohlc,
             if ClosePrice > 0:
                 ClosePrice = ClosePrice + spread + slippage
                 ShortTrade[i] = -ClosePrice #売りポジションクローズ
-                ShortTradeLots[i] = sellExecLot
                 ShortPL[i] = (sellExecPrice - ClosePrice) * sellExecLot #損益確定
                 sellExecPrice = sellExecLot = 0
 
@@ -175,7 +143,6 @@ def Backtest(ohlc,
                     ClosePrice = LimitPrice - slippage
             if ClosePrice > 0:
                 LongTrade[i] = -ClosePrice #買いポジションクローズ
-                LongTradeLots[i] = buyExecLot
                 LongPL[i] = (ClosePrice - buyExecPrice) * buyExecLot #損益確定
                 buyExecPrice = buyExecLot = 0
 
@@ -193,7 +160,6 @@ def Backtest(ohlc,
                     ClosePrice = LimitPrice + slippage
             if ClosePrice > 0:
                 ShortTrade[i] = -ClosePrice #売りポジションクローズ
-                ShortTradeLots[i] = sellExecLot
                 ShortPL[i] = (sellExecPrice - ClosePrice) * sellExecLot #損益確定
                 sellExecPrice = sellExecLot = 0
 
@@ -203,17 +169,67 @@ def Backtest(ohlc,
     if buyExecPrice > 0:
         ClosePrice = Close[N-1]
         LongTrade[N-1] = -ClosePrice #買いポジションクローズ
-        LongTradeLots[N-1] = buyExecLot
         LongPL[N-1] = (ClosePrice - buyExecPrice) * buyExecLot #損益確定
     if sellExecPrice > 0:
         ClosePrice = Close[N-1]
         ShortTrade[N-1] = -ClosePrice #売りポジションクローズ
-        ShortTradeLots[N-1] = sellExecLot
         ShortPL[N-1] = (sellExecPrice - ClosePrice) * sellExecLot #損益確定
 
+
+def Backtest(ohlcv,
+    buy_entry=None, sell_entry=None, buy_exit=None, sell_exit=None,
+    stop_buy_entry=None, stop_sell_entry=None, stop_buy_exit=None, stop_sell_exit=None,
+    lots=0.1, spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0, percent_of_equity=(0.0, 0.0)):
+    Open = ohlcv.open.values #始値
+    Low = ohlcv.low.values #安値
+    High = ohlcv.high.values #高値
+    Close = ohlcv.close.values #始値
+
+    N = len(ohlcv) #データサイズ
+    buyExecPrice = sellExecPrice = 0.0 # 売買価格
+    buyStopEntry = buyStopExit = sellStopEntry = sellStopExit = 0
+    buyExecLot = sellExecLot = 0
+
+    LongTrade = np.zeros(N) # 買いトレード情報
+    ShortTrade = np.zeros(N) # 売りトレード情報
+
+    LongPL = np.zeros(N) # 買いポジションの損益
+    ShortPL = np.zeros(N) # 売りポジションの損益
+
+    place_holder = np.zeros(N) # プレースホルダ
+    if isinstance(lots, pd.Series):
+        lots = lots.values
+    else:
+        lots = np.full(shape=(N), fill_value=float(lots))
+
+    buy_entry = place_holder if buy_entry is None else buy_entry.values
+    sell_entry = place_holder if sell_entry is None else sell_entry.values
+    buy_exit = place_holder if buy_exit is None else buy_exit.values
+    sell_exit = place_holder if sell_exit is None else sell_exit.values
+
+    # トレーリングストップ価格を設定(STOP注文として処理する)
+    if trailing_stop > 0:
+        stop_buy_exit = ohlcv.high - trailing_stop
+        stop_sell_exit = ohlcv.low + trailing_stop
+
+    stop_buy_entry = place_holder if stop_buy_entry is None else stop_buy_entry.values
+    stop_sell_entry = place_holder if stop_sell_entry is None else stop_sell_entry.values
+    stop_buy_exit = place_holder if stop_buy_exit is None else stop_buy_exit.values
+    stop_sell_exit = place_holder if stop_sell_exit is None else stop_sell_exit.values
+
+    percent = percent_of_equity[0]
+    capital = percent_of_equity[1]
+
+    BacktestCore(Open, High, Low, Close, N,
+        buy_entry, sell_entry, buy_exit, sell_exit,
+        stop_buy_entry, stop_sell_entry, stop_buy_exit, stop_sell_exit,
+        lots,
+        float(spread), float(take_profit), float(stop_loss), float(trailing_stop), float(slippage), float(percent), float(capital),
+        LongTrade, LongPL, ShortTrade, ShortPL)
+
     return BacktestReport(
-        Trades=pd.DataFrame({'Long':LongTrade, 'Short':ShortTrade}, index=ohlc.index),
-        PL=pd.DataFrame({'Long':LongPL, 'Short':ShortPL}, index=ohlc.index))
+        Trades=pd.DataFrame({'Long':LongTrade, 'Short':ShortTrade}, index=ohlcv.index),
+        PL=pd.DataFrame({'Long':LongPL, 'Short':ShortPL}, index=ohlcv.index))
 
 
 class BacktestReport:
@@ -398,3 +414,19 @@ def BacktestIteration(testfunc, default_parameters, hyperopt_parameters, max_eva
     report.Raw.PL.to_csv('pl.csv')
     report.Equity.to_csv('equity.csv')
     print(report)
+
+if __name__ == '__main__':
+
+    from utils import stop_watch
+
+    ohlcv = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
+    long_entry = ohlcv.close > ohlcv.close.shift(1)
+    short_entry = ohlcv.close < ohlcv.close.shift(1)
+    long_exit = short_entry
+    short_exit = long_entry
+    Backtest = stop_watch(Backtest)
+
+    Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit, lots=1)
+    Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit, lots=1)
+    Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit, lots=1)
+    Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit, lots=1)
