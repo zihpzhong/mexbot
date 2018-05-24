@@ -5,7 +5,7 @@ from functools import lru_cache
 from numba import jit, b1, f8, i8, void
 
 @jit(void(f8[:],i8,i8,f8[:]),nopython=True)
-def fast_sma_core(v, n, p, r):
+def __sma_core(v, n, p, r):
     sum = 0
     wp = 0
     q = np.empty(p)
@@ -26,7 +26,7 @@ def fastsma(source, period):
     n = len(v)
     p = int(period)
     r = np.empty(n)
-    fast_sma_core(v,n,period,r)
+    __sma_core(v,n,period,r)
     return pd.Series(r, index=source.index)
 
 def sma(source, period):
@@ -203,7 +203,7 @@ def pivotlow(source, leftbars, rightbars):
     return pvlo.shift(rightbars) if rightbars > 0 else pvlo
 
 @jit(void(f8[:],f8[:],i8,f8,f8,f8,f8[:]),nopython=True)
-def fast_sar_core(high, low, n, start, inc, max, sar):
+def __sar_core(high, low, n, start, inc, max, sar):
     sar[0] = low[0]
     ep = high[0]
     acc = start
@@ -235,7 +235,7 @@ def fastsar(high, low, start, inc, max):
     low = low.values
     n = len(high)
     sar = np.empty(n)
-    fast_sar_core(high, low, n, start, inc, max, sar)
+    __sar_core(high, low, n, start, inc, max, sar)
     return pd.Series(sar, index=index)
 
 def sar(high, low, start, inc, max):
@@ -295,6 +295,34 @@ def fibratio(n):
     f = fib(n)
     return f / f.iat[n-1]
 
+@jit(f8(f8[:],i8,i8),nopython=True)
+def __rci_d(v, i, p):
+    sum = 0.0
+    for j in range(p):
+        o = 1
+        k = v[i-j]
+        for l in range(p):
+            if k < v[i-l]:
+                o = o + 1
+        sum = sum + (j + 1 - o) ** 2
+    return sum
+
+@jit(void(f8[:],i8,i8,f8[:]),nopython=True)
+def __rci_core(v, n, p, r):
+    k = (p * (p ** 2 - 1))
+    for i in range(p-1):
+        r[i] = np.nan
+    for i in range(p-1, n):
+        r[i] = ((1.0 - (6.0 * __rci_d(v, i, p)) / k)) * 100.0
+
+def fastrci(source, period):
+    v = source.values
+    n = len(v)
+    p = int(period)
+    r = np.empty(n)
+    __rci_core(v,n,p,r)
+    return pd.Series(r, index=source.index)
+
 def rci(source, period):
     """
     ord(seq, idx, itv) =>
@@ -315,28 +343,27 @@ def rci(source, period):
     period = int(period)
     v = source.values
     n = len(v)
-    rci = np.empty(n)
-    for i in range(0, period):
-        rci[i] = np.nan
+    r = np.empty(n)
+    for i in range(period-1):
+        r[i] = np.nan
 
-    rank_index = np.array(range(1, period+1))
-    def d1(isrc):
-        rank_value = np.argsort(v[isrc-period:isrc])
-        return np.sum((rank_index - rank_value) ** 2)
+    # rank_idx = np.array(range(1, period+1))
+    # def d(isrc):
+    #     rank_ord = np.argsort(v[isrc-period+1:isrc+1])
+    #     return np.sum((rank_idx - rank_ord) ** 2)
 
-    def d2(isrc):
+    def d(isrc):
         r = 0
-        ord = np.argsort(v[isrc-period:isrc])
-        for i in range(0, period):
+        ord = np.argsort(v[isrc-period+1:isrc+1])
+        for i in range(period):
             r = r + (i + 1 - ord[i]) ** 2
         return r
 
-    d = d1
     k = (period * (period ** 2 - 1))
-    for i in range(period, n):
-        rci[i] = ((1.0 - (6.0 * d(i)) / k)) * 100.0
+    for i in range(period-1, n):
+        r[i] = ((1.0 - (6.0 * d(i)) / k)) * 100.0
 
-    return pd.Series(rci, index=source.index)
+    return pd.Series(r, index=source.index)
 
 def polyfline(source, period, deg=2):
     period = int(period)
@@ -388,6 +415,7 @@ if __name__ == '__main__':
     minimum = stop_watch(minimum)
     maximum = stop_watch(maximum)
     rci = stop_watch(rci)
+    fastrci = stop_watch(fastrci)
     polyfline = stop_watch(polyfline)
 
     vfastsma = fastsma(ohlc.close, 10)
@@ -412,6 +440,7 @@ if __name__ == '__main__':
     vmin = minimum(ohlc.open, ohlc.close, 14)
     vmax = maximum(ohlc.open, ohlc.close, 14)
     vrci = rci(ohlc.open, 14)
+    vfastrci = fastrci(ohlc.open, 14)
     vply = polyfline(ohlc.open, 14)
     df = pd.DataFrame({
         'high':ohlc.high,
@@ -444,6 +473,7 @@ if __name__ == '__main__':
         'min':vmin,
         'max':vmax,
         'rci':vrci,
+        'fastrci':vfastrci,
         'polyfit':vply,
         }, index=ohlc.index)
     print(df.to_csv())

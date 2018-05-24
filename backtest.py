@@ -197,15 +197,16 @@ def Backtest(ohlcv,
     ShortPL = np.zeros(N) # 売りポジションの損益
 
     place_holder = np.zeros(N) # プレースホルダ
+    bool_place_holder = np.zeros(N, dtype=np.bool) # プレースホルダ
     if isinstance(lots, pd.Series):
         lots = lots.values
     else:
         lots = np.full(shape=(N), fill_value=float(lots))
 
-    buy_entry = place_holder if buy_entry is None else buy_entry.values
-    sell_entry = place_holder if sell_entry is None else sell_entry.values
-    buy_exit = place_holder if buy_exit is None else buy_exit.values
-    sell_exit = place_holder if sell_exit is None else sell_exit.values
+    buy_entry = bool_place_holder if buy_entry is None else buy_entry.values
+    sell_entry = bool_place_holder if sell_entry is None else sell_entry.values
+    buy_exit = bool_place_holder if buy_exit is None else buy_exit.values
+    sell_exit = bool_place_holder if sell_exit is None else sell_exit.values
 
     # トレーリングストップ価格を設定(STOP注文として処理する)
     if trailing_stop > 0:
