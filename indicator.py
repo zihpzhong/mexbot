@@ -30,11 +30,19 @@ def fastsma(source, period):
     return pd.Series(r, index=source.index)
 
 def sma(source, period):
-    return source.rolling(int(period)).mean()
+    period = int(period)
+    return source.rolling(period).mean()
 
 def dsma(source, period):
-    sma = source.rolling(int(period)).mean()
-    return (sma * 2) - sma.rolling(int(period)).mean()
+    period = int(period)
+    sma = source.rolling(period).mean()
+    return (sma * 2) - sma.rolling(period).mean()
+
+def tsma(source, period):
+    period = int(period)
+    sma = source.rolling(period).mean()
+    sma2 = sma.rolling(period).mean()
+    return (sma * 3) - (sma2 * 3) + sma2.rolling(period).mean()
 
 def ema(source, period):
     # alpha = 2.0 / (period + 1)
@@ -54,13 +62,16 @@ def rma(source, period):
     return source.ewm(alpha=alpha).mean()
 
 def highest(source, period):
-    return source.rolling(int(period)).max()
+    period = int(period)
+    return source.rolling(period).max()
 
 def lowest(source, period):
-    return source.rolling(int(period)).min()
+    period = int(period)
+    return source.rolling(period).min()
 
 def stdev(source, period):
-    return source.rolling(int(period)).std()
+    period = int(period)
+    return source.rolling(period).std()
 
 def rsi(source, period):
     diff = source.diff()
@@ -181,7 +192,8 @@ def last(source, period=0):
     last(close, 0)  現在の足
     last(close, 1)  1つ前の足
     """
-    return source.iat[-1-int(period)]
+    period = int(period)
+    return source.iat[-1-period]
 
 def change(source, length=1):
     return source.diff(length).fillna(0)
@@ -273,12 +285,14 @@ def sar(high, low, start, inc, max):
 def minimum(a, b, period):
     c = a.copy()
     c[a > b] = b
-    return c.rolling(int(period)).min()
+    period = int(period)
+    return c.rolling(period).min()
 
 def maximum(a, b, period):
     c = a.copy()
     c[a < b] = b
-    return c.rolling(int(period)).max()
+    period = int(period)
+    return c.rolling(period).max()
 
 @lru_cache(maxsize=None)
 def fib(n):
@@ -396,6 +410,7 @@ if __name__ == '__main__':
     fastsma = stop_watch(fastsma)
     sma = stop_watch(sma)
     dsma = stop_watch(dsma)
+    tsma = stop_watch(tsma)
     ema = stop_watch(ema)
     dema = stop_watch(dema)
     tema = stop_watch(tema)
@@ -421,6 +436,7 @@ if __name__ == '__main__':
     vfastsma = fastsma(ohlc.close, 10)
     vsma = sma(ohlc.close, 10)
     vdsma = dsma(ohlc.close, 10)
+    vtsma = tsma(ohlc.close, 10)
     vema = ema(ohlc.close, 10)
     vdema = dema(ohlc.close, 10)
     vtema = tema(ohlc.close, 10)
@@ -449,6 +465,7 @@ if __name__ == '__main__':
         'fastsma':vfastsma,
         'sma':vsma,
         'dsma':vdsma,
+        'tsma':vtsma,
         'ema':vema,
         'dema':vdema,
         'tema':vtema,
