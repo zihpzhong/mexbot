@@ -365,29 +365,28 @@ class BacktestReport:
 # 参考
 # https://qiita.com/kenchin110100/items/ac3edb480d789481f134
 
-def BacktestIteration(testfunc, default_parameters, hyperopt_parameters, max_evals):
+def BacktestIteration(testfunc, default_parameters, hyperopt_parameters, max_evals, maximize=lambda r:r.Total.ProfitFactor):
 
     needs_header = [True]
 
-    def objective(args):
+    def go(args):
         params = default_parameters.copy()
         params.update(args)
         report = testfunc(**params)
         params.update(report.Total)
         if needs_header[0]:
             print(','.join(params.keys()))
-        values = [str(x) for x in params.values()]
-        print(','.join(values))
+        print(','.join([str(x) for x in params.values()]))
         needs_header[0] = False
-        return -1 * report.Total.ProfitFactor
-
-    # 試行の過程を記録するインスタンス
-    trials = Trials()
+        return report
 
     if max_evals > 0:
+        # 試行の過程を記録するインスタンス
+        trials = Trials()
+
         best = fmin(
             # 最小化する値を定義した関数
-            objective,
+            lambda args: -1 * maximize(go(args)),
             # 探索するパラメータのdictもしくはlist
             hyperopt_parameters,
             # どのロジックを利用するか、基本的にはtpe.suggestでok
@@ -406,15 +405,10 @@ def BacktestIteration(testfunc, default_parameters, hyperopt_parameters, max_eva
 
     params = default_parameters.copy()
     params.update(best)
-    report = testfunc(**params)
-    params.update(report.Total)
-    values = [str(x) for x in params.values()]
-    print(','.join(values))
-
-    report.Raw.Trades.to_csv('trades.csv')
-    report.Raw.PL.to_csv('pl.csv')
-    report.Equity.to_csv('equity.csv')
+    report = go(params)
     print(report)
+    return (params, report)
+
 
 if __name__ == '__main__':
 
