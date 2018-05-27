@@ -48,8 +48,6 @@ def shooter_backtest(smalength, overshoot, undershoot):
     report = Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit,
         stop_buy_entry=long_entry_price, stop_sell_entry=short_entry_price, stop_buy_exit=long_exit_price, stop_sell_exit=short_exit_price,
         lots=1, spread=0, take_profit=0, stop_loss=0, trailing_stop=20, slippage=0)
-    report.Total.shortProfit = report.Short.Profit
-    report.Total.longProfit = report.Long.Profit
     return report
 
 default_parameters = {

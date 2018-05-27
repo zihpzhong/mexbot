@@ -60,7 +60,7 @@ if __name__ == '__main__':
     strategy.settings.interval = 60
     strategy.settings.apiKey = settings.apiKey
     strategy.settings.secret = settings.secret
-    strategy.testnet.use = False
+    strategy.testnet.use = True
     strategy.testnet.apiKey = settings.testnet_apiKey
     strategy.testnet.secret = settings.testnet_secret
 

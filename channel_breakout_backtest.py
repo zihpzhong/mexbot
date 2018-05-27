@@ -4,10 +4,8 @@ from backtest import Backtest, BacktestReport, BacktestIteration
 from hyperopt import hp
 from indicator import *
 
-# テストデータ読み込み
-ohlcv = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
 
-def channel_breakout_backtest(breakout_in, breakout_out, rsiperiod, overBought, overSold, fastperiod, slowperiod, filterth, take_profit, stop_loss, trailing_stop, klot):
+def channel_breakout_backtest(ohlcv, breakout_in, breakout_out, rsiperiod, overBought, overSold, fastperiod, slowperiod, filterth, take_profit, stop_loss, trailing_stop, klot):
     ignore = int(max(breakout_in, breakout_out))
 
     # エントリー・エグジット
@@ -43,7 +41,7 @@ def channel_breakout_backtest(breakout_in, breakout_out, rsiperiod, overBought, 
         lots = (1 - (fastsma / slowsma)).abs()
         lots = (1 - lots * klot)
         lots.clip(0.01, 1.0, inplace=True)
-        lots = lots
+        lots = lots * 10
     else:
         lots = 1
 
@@ -94,43 +92,49 @@ def channel_breakout_backtest(breakout_in, breakout_out, rsiperiod, overBought, 
         short_exit_price = None
 
     # バックテスト実施
-    entry_exit = pd.DataFrame({'close':ohlcv.close, 'open':ohlcv.open, 'lots':lots,
-        'long_entry_price':long_entry_price, 'long_exit_price':long_exit_price, 'long_entry':long_entry, 'long_exit':long_exit,
-        'short_entry_price':short_entry_price, 'short_entry':short_entry, 'short_exit_price':short_exit_price, 'short_exit':short_exit})#, index=ohlcv.index)
-    entry_exit.to_csv('entry_exit.csv')
+    # entry_exit = pd.DataFrame({'close':ohlcv.close, 'open':ohlcv.open, 'lots':lots,
+    #     'long_entry_price':long_entry_price, 'long_exit_price':long_exit_price, 'long_entry':long_entry, 'long_exit':long_exit,
+    #     'short_entry_price':short_entry_price, 'short_entry':short_entry, 'short_exit_price':short_exit_price, 'short_exit':short_exit})#, index=ohlcv.index)
+    # entry_exit.to_csv('entry_exit.csv')
 
     return Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit,
         stop_buy_entry=long_entry_price, stop_sell_entry=short_entry_price, stop_buy_exit=long_exit_price, stop_sell_exit=short_exit_price,
-        lots=lots, spread=0, take_profit=take_profit, stop_loss=stop_loss, trailing_stop=trailing_stop, slippage=0, percent_of_equity=(1, 1000))
+        lots=lots, spread=0, take_profit=take_profit, stop_loss=stop_loss, trailing_stop=trailing_stop, slippage=0)#, percent_of_equity=(1, 1000))
 
-default_parameters = {
-    'breakout_in':18,
-    'breakout_out':18,
-    'rsiperiod':0,
-    'overBought':79,
-    'overSold':29,
-    'fastperiod':13,
-    'slowperiod':26,
-    'filterth':0,
-    'take_profit':0,
-    'stop_loss':0,
-    'trailing_stop':0,
-    'klot':0,
-}
+if __name__ == '__main__':
 
-hyperopt_parameters = {
-    'breakout_in': hp.quniform('breakout_in', 1, 30, 1),
-    'breakout_out': hp.quniform('breakout_out', 1, 30, 1),
-    # 'rsiperiod': hp.quniform('rsiperiod', 1, 50, 1),
-    # 'overBought': hp.quniform('overBought', 50, 100, 1),
-    # 'overSold': hp.quniform('overSold', 0, 50, 1),
-    # 'fastperiod': hp.quniform('fastperiod', 1, 50, 1),
-    # 'slowperiod': hp.quniform('slowperiod', 1, 50, 1),
-    # 'filterth': hp.quniform('filterth', 1, 100, 1),
-    # 'take_profit': hp.quniform('take_profit', 0, 100, 5),
-    # 'stop_loss': hp.quniform('stop_loss', 0, 40, 2),
-    # 'trailing_stop': hp.quniform('trailing_stop', 0, 100, 1),
-    # 'klot': hp.loguniform('klot', 1, 10),
-}
+    # テストデータ読み込み
+    ohlcv = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
 
-BacktestIteration(channel_breakout_backtest, default_parameters, hyperopt_parameters, 0)
+    default_parameters = {
+        'ohlcv':ohlcv,
+        'breakout_in':18,
+        'breakout_out':18,
+        'rsiperiod':0,
+        'overBought':79,
+        'overSold':29,
+        'fastperiod':13,
+        'slowperiod':26,
+        'filterth':0,
+        'take_profit':0,
+        'stop_loss':0,
+        'trailing_stop':0,
+        'klot':0,
+    }
+
+    hyperopt_parameters = {
+        'breakout_in': hp.quniform('breakout_in', 1, 30, 1),
+        'breakout_out': hp.quniform('breakout_out', 1, 30, 1),
+        # 'rsiperiod': hp.quniform('rsiperiod', 1, 50, 1),
+        # 'overBought': hp.quniform('overBought', 50, 100, 1),
+        # 'overSold': hp.quniform('overSold', 0, 50, 1),
+        # 'fastperiod': hp.quniform('fastperiod', 1, 50, 1),
+        # 'slowperiod': hp.quniform('slowperiod', 1, 50, 1),
+        # 'filterth': hp.quniform('filterth', 1, 100, 1),
+        # 'take_profit': hp.quniform('take_profit', 0, 100, 5),
+        # 'stop_loss': hp.quniform('stop_loss', 0, 40, 2),
+        # 'trailing_stop': hp.quniform('trailing_stop', 0, 100, 1),
+        # 'klot': hp.loguniform('klot', 1, 10),
+    }
+
+    best, report = BacktestIteration(channel_breakout_backtest, default_parameters, hyperopt_parameters, 200)
