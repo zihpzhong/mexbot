@@ -21,13 +21,13 @@ def calclots(capital, price, percent, lot):
 @jit(void(f8[:],f8[:],f8[:],f8[:],i8,
     b1[:],b1[:],b1[:],b1[:],
     f8[:],f8[:],f8[:],f8[:],
-    f8[:],
+    f8[:],f8,
     f8,f8,f8,f8,f8,f8,f8,
     f8[:],f8[:],f8[:],f8[:],f8[:],f8[:]), nopython=True)
 def BacktestCore(Open, High, Low, Close, N,
     buy_entry, sell_entry, buy_exit, sell_exit,
     stop_buy_entry, stop_sell_entry, stop_buy_exit, stop_sell_exit,
-    lots,
+    lots, max_size,
     spread, take_profit, stop_loss, trailing_stop, slippage, percent, capital,
     LongTrade, LongPL, LongPct, ShortTrade, ShortPL, ShortPct):
 
@@ -45,7 +45,7 @@ def BacktestCore(Open, High, Low, Close, N,
         BuyNow = SellNow = False
 
         # 買い注文処理
-        if buyExecPrice == 0:
+        if buyExecLot < max_size:
             OpenPrice = 0
             # 成り行き注文
             if buy_entry[i-1]:
@@ -54,18 +54,19 @@ def BacktestCore(Open, High, Low, Close, N,
             if stop_buy_entry[i-1] > 0:
                 buyStopEntry = stop_buy_entry[i-1]
             if buyStopEntry > 0 and High[i] >= buyStopEntry:
-                if Open[i] <= buyStopEntry:
-                    OpenPrice = buyStopEntry
-                else:
-                    OpenPrice = Open[i]
+                OpenPrice = buyStopEntry
                 buyStopEntry = 0
             # 注文執行
             if OpenPrice > 0:
-                buyExecPrice = OpenPrice + spread + slippage
-                LongTrade[i] = buyExecPrice #買いポジションオープン
-                buyExecLot =  calclots(capital, OpenPrice, percent, lots[i])
+                execPrice = OpenPrice + spread + slippage
+                LongTrade[i] = execPrice #買いポジションオープン
+                execLot =  calclots(capital, OpenPrice, percent, lots[i])
+                buyExecPrice = ((execPrice*execLot)+(buyExecPrice*buyExecLot))/(buyExecLot+execLot)
+                buyExecLot = buyExecLot + execLot
                 BuyNow = True
-        else:
+
+        # 買い手仕舞い
+        if buyExecPrice > 0 and not BuyNow:
             ClosePrice = 0
             # 成り行き注文
             if buy_exit[i-1] > 0:
@@ -74,10 +75,7 @@ def BacktestCore(Open, High, Low, Close, N,
             if stop_buy_exit[i-1] > 0:
                 buyStopExit = stop_buy_exit[i-1]
             if buyStopExit > 0 and Low[i] <= buyStopExit:
-                if Open[i] >= buyStopExit:
-                    ClosePrice = buyStopExit
-                else:
-                    ClosePrice = Open[i]
+                ClosePrice = buyStopExit
                 buyStopExit = 0
             # 注文執行
             if ClosePrice > 0:
@@ -88,7 +86,7 @@ def BacktestCore(Open, High, Low, Close, N,
                 buyExecPrice = buyExecLot = 0
 
         # 売り注文処理
-        if sellExecPrice == 0:
+        if sellExecLot < max_size:
             OpenPrice = 0
             # 成り行き注文
             if sell_entry[i-1] > 0:
@@ -97,18 +95,19 @@ def BacktestCore(Open, High, Low, Close, N,
             if stop_sell_entry[i-1] > 0:
                 sellStopEntry = stop_sell_entry[i-1]
             if sellStopEntry > 0 and Low[i] <= sellStopEntry:
-                if Open[i] >= sellStopEntry:
-                    OpenPrice = sellStopEntry
-                else:
-                    OpenPrice = Open[i]
+                OpenPrice = sellStopEntry
                 sellStopEntry = 0
             # 注文執行
             if OpenPrice:
-                sellExecPrice = OpenPrice - slippage
-                ShortTrade[i] = sellExecPrice #売りポジションオープン
-                sellExecLot = calclots(capital, OpenPrice, percent, lots[i])
+                execPrice = OpenPrice - slippage
+                ShortTrade[i] = execPrice #売りポジションオープン
+                execLot = calclots(capital, OpenPrice, percent, lots[i])
+                sellExecPrice = ((execPrice*execLot)+(sellExecPrice*sellExecLot))/(sellExecLot+execLot)
+                sellExecLot = sellExecLot + execLot
                 SellNow = True
-        else:
+
+        # 売り手仕舞い
+        if sellExecPrice > 0 and not SellNow:
             ClosePrice = 0
             # 成り行き注文
             if sell_exit[i-1] > 0:
@@ -117,10 +116,7 @@ def BacktestCore(Open, High, Low, Close, N,
             if stop_sell_exit[i-1] > 0:
                 sellStopExit = stop_sell_exit[i-1]
             if sellStopExit > 0 and High[i] >= sellStopExit:
-                if Open[i] <= sellStopExit:
-                    ClosePrice = sellStopExit
-                else:
-                    ClosePrice = Open[i]
+                ClosePrice = sellStopExit
                 sellStopExit = 0
             # 注文執行
             if ClosePrice > 0:
@@ -131,7 +127,7 @@ def BacktestCore(Open, High, Low, Close, N,
                 sellExecPrice = sellExecLot = 0
 
         # 利確 or 損切によるポジションの決済(エントリーと同じ足で決済しない)
-        if buyExecPrice != 0 and not BuyNow:
+        if buyExecPrice > 0 and not BuyNow:
             ClosePrice = 0
             if stop_loss > 0:
                 # 損切判定 Open -> Low
@@ -149,7 +145,7 @@ def BacktestCore(Open, High, Low, Close, N,
                 LongPct[i] = LongPL[i] / buyExecPrice
                 buyExecPrice = buyExecLot = 0
 
-        if sellExecPrice != 0 and not SellNow:
+        if sellExecPrice > 0 and not SellNow:
             ClosePrice = 0
             if stop_loss > 0:
                 # 損切判定 Open -> High
@@ -185,7 +181,7 @@ def BacktestCore(Open, High, Low, Close, N,
 def Backtest(ohlcv,
     buy_entry=None, sell_entry=None, buy_exit=None, sell_exit=None,
     stop_buy_entry=None, stop_sell_entry=None, stop_buy_exit=None, stop_sell_exit=None,
-    lots=0.1, spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0, percent_of_equity=(0.0, 0.0)):
+    lots=1.0, max_size=1.0, spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0, percent_of_equity=0.0, initial_capital=0.0, **kwargs):
     Open = ohlcv.open.values #始値
     Low = ohlcv.low.values #安値
     High = ohlcv.high.values #高値
@@ -227,13 +223,13 @@ def Backtest(ohlcv,
     stop_buy_exit = place_holder if stop_buy_exit is None else stop_buy_exit.values
     stop_sell_exit = place_holder if stop_sell_exit is None else stop_sell_exit.values
 
-    percent = percent_of_equity[0]
-    capital = percent_of_equity[1]
+    percent = percent_of_equity
+    capital = initial_capital
 
     BacktestCore(Open, High, Low, Close, N,
         buy_entry, sell_entry, buy_exit, sell_exit,
         stop_buy_entry, stop_sell_entry, stop_buy_exit, stop_sell_exit,
-        lots,
+        lots, float(max_size),
         float(spread), float(take_profit), float(stop_loss), float(trailing_stop), float(slippage), float(percent), float(capital),
         LongTrade, LongPL, LongPct, ShortTrade, ShortPL, ShortPct)
 
@@ -428,7 +424,7 @@ if __name__ == '__main__':
 
     from utils import stop_watch
 
-    ohlcv = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
+    ohlcv = pd.read_csv('csv/bitmex_2018_1m.csv', index_col='timestamp', parse_dates=True)
     long_entry = ohlcv.close > ohlcv.close.shift(1)
     short_entry = ohlcv.close < ohlcv.close.shift(1)
     long_exit = short_entry

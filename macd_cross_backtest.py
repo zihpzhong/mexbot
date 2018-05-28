@@ -25,26 +25,28 @@ def macd_cross_backtest(ohlcv, fastlen, slowlen, siglen, smafastlen, smaslowlen,
 
     # エントリー／イグジット
     if use_sma:
-        long_entry = crossover(vmacd, vsig) | crossover(vfast, vslow)
-        short_entry = crossunder(vmacd, vsig) | crossunder(vfast, vslow)
+        buy_entry = crossover(vmacd, vsig) | crossover(vfast, vslow)
+        sell_entry = crossunder(vmacd, vsig) | crossunder(vfast, vslow)
     else:
-        long_entry = crossover(vmacd, vsig)
-        short_entry = crossunder(vmacd, vsig)
-    long_exit = short_entry
-    short_exit = long_entry
+        buy_entry = crossover(vmacd, vsig)
+        sell_entry = crossunder(vmacd, vsig)
+    buy_exit = sell_entry
+    sell_exit = buy_entry
 
     ignore = int(max([fastlen, slowlen, smafastlen, smaslowlen]))
-    long_entry[:ignore] = False
-    long_exit[:ignore] = False
-    short_entry[:ignore] = False
-    short_exit[:ignore] = False
+    buy_entry[:ignore] = False
+    buy_exit[:ignore] = False
+    sell_entry[:ignore] = False
+    sell_exit[:ignore] = False
 
     # entry_exit = pd.DataFrame({'close':ohlcv.close, 'macd':vmacd, 'sig':vsig, #'fast':vfast, 'slow':vslow,
-    #     'long_entry_price':long_entry_price, 'long_exit_price':long_exit_price, 'long_entry':long_entry, 'long_exit':long_exit,
-    #     'short_entry_price':short_entry_price, 'short_entry':short_entry, 'short_exit_price':short_exit_price, 'short_exit':short_exit})#, index=ohlcv.index)
+    #     'buy_entry':buy_entry, 'buy_exit':buy_exit, 'sell_entry':sell_entry, 'sell_exit':sell_exit})#, index=ohlcv.index)
     # entry_exit.to_csv('entry_exit.csv')
 
-    return Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit, lots=1)#, percent_of_equity=(1, 1000))
+    lots = 1
+    max_size = 1
+
+    return Backtest(**locals())
 
 if __name__ == '__main__':
 
@@ -86,4 +88,4 @@ if __name__ == '__main__':
         # 'smaslowlen': hp.quniform('smaslowlen', 1, 50, 1),
     }
 
-    best, report = BacktestIteration(macd_cross_backtest, default_parameters, hyperopt_parameters, 100)
+    best, report = BacktestIteration(macd_cross_backtest, default_parameters, hyperopt_parameters, 0)
