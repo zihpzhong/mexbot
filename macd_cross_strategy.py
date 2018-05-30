@@ -1,18 +1,19 @@
 # -*- coding: utf-8 -*-
 from indicator import *
+from utils import reloadable_jsondict
 
-# インディケータ期間
-fastlen = 19
-slowlen = 27
-siglen = 13
-
-# ロット計算用資産比
-percent = 0.25
+params = reloadable_jsondict('params/macd_cross_params.json')
 
 def macd_cross_strategy(ticker, ohlcv, position, balance, strategy):
 
+    # パラメータ更新チェック
+    prm = params.reload()[strategy.settings.symbol]
+    if params.reloaded:
+        logger.info('PARAM reloaded {fastlen} {slowlen} {siglen} {percent}'.format(**prm))
+        params.reloaded = False
+
     # インジケーター作成
-    vmacd, vsig, vhist = macd(ohlcv.close, fastlen, slowlen, siglen, use_sma=True)
+    vmacd, vsig, vhist = macd(ohlcv.close, prm.fastlen, prm.slowlen, prm.siglen, use_sma=True)
 
     # エントリー／イグジット
     long_entry = last(crossover(vmacd, vsig))
@@ -28,9 +29,9 @@ def macd_cross_strategy(ticker, ohlcv, position, balance, strategy):
     # ロット数計算
     quote = strategy.exchange.market(strategy.settings.symbol)['quote']
     if quote == 'BTC':
-        qty_lot = int(balance.BTC.free * percent / ticker.last)
+        qty_lot = int(balance.BTC.total * prm.percent / ticker.last)
     else:
-        qty_lot = int(balance.BTC.free * percent * ticker.last)
+        qty_lot = int(balance.BTC.total * prm.percent * ticker.last)
     logger.info('LOT: ' + str(qty_lot))
 
     # 最大ポジション数設定
@@ -65,17 +66,9 @@ if __name__ == '__main__':
     strategy.testnet.secret = settings.testnet_secret
 
     parser = strategy.add_arguments(argparse.ArgumentParser(description='MACD Cross Bot'))
-    parser.add_argument('--parameter', nargs=3, type=int, default=[fastlen, slowlen, siglen])
-    parser.add_argument('--percent', type=float, default=percent)
     args = parser.parse_args()
 
-    logging.config.dictConfig(
-        settings.loggingConf('macd-cross-bot-' + args.symbol.replace('/','_').lower() + '.log'))
+    logging.config.dictConfig(settings.loggingConf(params[args.symbol].logfilename))
     logger = logging.getLogger('MACDCrossBot')
-
-    fastlen = args.parameter[0]
-    slowlen = args.parameter[1]
-    siglen = args.parameter[2]
-    percent = args.percent
 
     strategy.start(args)
