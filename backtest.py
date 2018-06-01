@@ -21,13 +21,13 @@ def calclots(capital, price, percent, lot):
 @jit(void(f8[:],f8[:],f8[:],f8[:],i8,
     b1[:],b1[:],b1[:],b1[:],
     f8[:],f8[:],f8[:],f8[:],
-    f8[:],f8,
+    f8[:],f8[:],f8,f8,
     f8,f8,f8,f8,f8,f8,f8,
     f8[:],f8[:],f8[:],f8[:],f8[:],f8[:]), nopython=True)
 def BacktestCore(Open, High, Low, Close, N,
     buy_entry, sell_entry, buy_exit, sell_exit,
     stop_buy_entry, stop_sell_entry, stop_buy_exit, stop_sell_exit,
-    lots, max_size,
+    buy_size, sell_size, max_buy_size, max_sell_size,
     spread, take_profit, stop_loss, trailing_stop, slippage, percent, capital,
     LongTrade, LongPL, LongPct, ShortTrade, ShortPL, ShortPct):
 
@@ -45,7 +45,7 @@ def BacktestCore(Open, High, Low, Close, N,
         BuyNow = SellNow = False
 
         # 買い注文処理
-        if buyExecLot < max_size:
+        if buyExecLot < max_buy_size:
             OpenPrice = 0
             # 成り行き注文
             if buy_entry[i-1]:
@@ -60,7 +60,7 @@ def BacktestCore(Open, High, Low, Close, N,
             if OpenPrice > 0:
                 execPrice = OpenPrice + spread + slippage
                 LongTrade[i] = execPrice #買いポジションオープン
-                execLot =  calclots(capital, OpenPrice, percent, lots[i])
+                execLot =  calclots(capital, OpenPrice, percent, buy_size[i])
                 buyExecPrice = ((execPrice*execLot)+(buyExecPrice*buyExecLot))/(buyExecLot+execLot)
                 buyExecLot = buyExecLot + execLot
                 BuyNow = True
@@ -86,7 +86,7 @@ def BacktestCore(Open, High, Low, Close, N,
                 buyExecPrice = buyExecLot = 0
 
         # 売り注文処理
-        if sellExecLot < max_size:
+        if sellExecLot < max_sell_size:
             OpenPrice = 0
             # 成り行き注文
             if sell_entry[i-1] > 0:
@@ -101,7 +101,7 @@ def BacktestCore(Open, High, Low, Close, N,
             if OpenPrice:
                 execPrice = OpenPrice - slippage
                 ShortTrade[i] = execPrice #売りポジションオープン
-                execLot = calclots(capital, OpenPrice, percent, lots[i])
+                execLot = calclots(capital, OpenPrice, percent, sell_size[i])
                 sellExecPrice = ((execPrice*execLot)+(sellExecPrice*sellExecLot))/(sellExecLot+execLot)
                 sellExecLot = sellExecLot + execLot
                 SellNow = True
@@ -181,7 +181,8 @@ def BacktestCore(Open, High, Low, Close, N,
 def Backtest(ohlcv,
     buy_entry=None, sell_entry=None, buy_exit=None, sell_exit=None,
     stop_buy_entry=None, stop_sell_entry=None, stop_buy_exit=None, stop_sell_exit=None,
-    lots=1.0, max_size=1.0, spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0, percent_of_equity=0.0, initial_capital=0.0, **kwargs):
+    buy_size=1.0, sell_size=1.0, max_buy_size=1.0, max_sell_size=1.0,
+    spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0, percent_of_equity=0.0, initial_capital=0.0, **kwargs):
     Open = ohlcv.open.values #始値
     Low = ohlcv.low.values #安値
     High = ohlcv.high.values #高値
@@ -203,10 +204,14 @@ def Backtest(ohlcv,
 
     place_holder = np.zeros(N) # プレースホルダ
     bool_place_holder = np.zeros(N, dtype=np.bool) # プレースホルダ
-    if isinstance(lots, pd.Series):
-        lots = lots.values
+    if isinstance(buy_size, pd.Series):
+        buy_size = buy_size.values
     else:
-        lots = np.full(shape=(N), fill_value=float(lots))
+        buy_size = np.full(shape=(N), fill_value=float(buy_size))
+    if isinstance(sell_size, pd.Series):
+        sell_size = sell_size.values
+    else:
+        sell_size = np.full(shape=(N), fill_value=float(sell_size))
 
     buy_entry = bool_place_holder if buy_entry is None else buy_entry.values
     sell_entry = bool_place_holder if sell_entry is None else sell_entry.values
@@ -229,7 +234,7 @@ def Backtest(ohlcv,
     BacktestCore(Open, High, Low, Close, N,
         buy_entry, sell_entry, buy_exit, sell_exit,
         stop_buy_entry, stop_sell_entry, stop_buy_exit, stop_sell_exit,
-        lots, float(max_size),
+        buy_size, sell_size, max_buy_size, max_sell_size,
         float(spread), float(take_profit), float(stop_loss), float(trailing_stop), float(slippage), float(percent), float(capital),
         LongTrade, LongPL, LongPct, ShortTrade, ShortPL, ShortPct)
 
@@ -431,7 +436,7 @@ if __name__ == '__main__':
     short_exit = long_entry
     Backtest = stop_watch(Backtest)
 
-    Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit, lots=1)
-    Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit, lots=1)
-    Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit, lots=1)
-    Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit, lots=1)
+    Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit)
+    Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit)
+    Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit)
+    Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit)

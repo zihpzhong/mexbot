@@ -39,12 +39,13 @@ def macd_cross_backtest(ohlcv, fastlen, slowlen, siglen, smafastlen, smaslowlen,
     sell_entry[:ignore] = False
     sell_exit[:ignore] = False
 
+    # ゼロラインフィルタ
+    buy_entry[vsig>0] = False
+    sell_entry[vsig<0] = False
+
     # entry_exit = pd.DataFrame({'close':ohlcv.close, 'macd':vmacd, 'sig':vsig, #'fast':vfast, 'slow':vslow,
     #     'buy_entry':buy_entry, 'buy_exit':buy_exit, 'sell_entry':sell_entry, 'sell_exit':sell_exit})#, index=ohlcv.index)
     # entry_exit.to_csv('entry_exit.csv')
-
-    lots = 1
-    max_size = 1
 
     return Backtest(**locals())
 

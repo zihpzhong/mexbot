@@ -19,10 +19,6 @@ def channel_breakout_backtest(ohlcv, breakout_in, breakout_out, fastperiod, slow
     stop_sell_entry[:ignore] = 0
     stop_sell_exit[:ignore] = 0
 
-    # バックテスト設定
-    lots = 1
-    max_size = 1
-
     # 2つの移動平均線の剥離によるエントリー制限
     if filterth > 0:
         fastsma = sma(ohlcv.close, fastperiod)
@@ -74,9 +70,9 @@ if __name__ == '__main__':
         'ohlcv':ohlcv,
         'breakout_in':18,
         'breakout_out':18,
-        'fastperiod':13,
-        'slowperiod':26,
-        'filterth':0,
+        'fastperiod':89,
+        'slowperiod':91,
+        'filterth':19,
         'klot':0,
     }
 
