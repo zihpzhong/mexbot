@@ -30,8 +30,8 @@ def macd_cross_backtest(ohlcv, fastlen, slowlen, siglen, smafastlen, smaslowlen,
     else:
         buy_entry = crossover(vmacd, vsig)
         sell_entry = crossunder(vmacd, vsig)
-    buy_exit = sell_entry
-    sell_exit = buy_entry
+    buy_exit = sell_entry.copy()
+    sell_exit = buy_entry.copy()
 
     ignore = int(max([fastlen, slowlen, smafastlen, smaslowlen]))
     buy_entry[:ignore] = False

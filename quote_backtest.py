@@ -1,73 +1,63 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
-import numpy as np
-from datetime import datetime
 from backtest import Backtest, BacktestReport, BacktestIteration
 from hyperopt import hp
 from indicator import *
 from functools import lru_cache
 
-# テストデータ読み込み
-ohlcv = pd.read_csv('csv/xbtusd_trade-20s.csv', index_col='timestamp', parse_dates=True)
 
-buysize =ohlcv['buy_volume']
-sellsize =ohlcv['sell_volume']
+def shooter_backtest(ohlcv, asklength, bidlength):
 
-@lru_cache(maxsize=32)
-def cached_buysize(period):
-    return sma(buysize, period)
+    buysize = ohlcv['buy_volume']
+    sellsize = ohlcv['sell_volume']
 
-@lru_cache(maxsize=32)
-def cached_sellsize(period):
-    return sma(sellsize, period)
+    @lru_cache(maxsize=None)
+    def cached_buysize(period):
+        return sma(buysize, period)
 
-def shooter_backtest(asklength, bidlength):
+    @lru_cache(maxsize=None)
+    def cached_sellsize(period):
+        return sma(sellsize, period)
 
     # インジケーター作成
     bid = cached_buysize(bidlength)
     ask = cached_sellsize(asklength)
 
     # エントリー／イグジット
-    long_entry = bid > ask
-    short_entry = ask > bid
-    long_exit = short_entry
-    short_exit = long_entry
+    buy_entry = bid > ask
+    sell_entry = ask > bid
+    buy_exit = sell_entry
+    sell_exit = buy_entry
 
-    long_entry_price = None
-    long_exit_price = None
-    short_entry_price = None
-    short_exit_price = None
+    ignore = int(max(asklength, bidlength))
+    buy_entry[:ignore] = False
+    buy_exit[:ignore] = False
+    sell_entry[:ignore] = False
+    sell_exit[:ignore] = False
 
-    ignore = int(max(asklength,bidlength))
-    long_entry[:ignore] = False
-    long_exit[:ignore] = False
-    short_entry[:ignore] = False
-    short_exit[:ignore] = False
+    #buy_size = sell_size = 500 / ohlcv.close
+    # entry_exit = pd.DataFrame({'close':ohlcv.close, 'ask':ask, 'bid':bid,
+    #     'buy_entry_price':buy_entry_price, 'buy_exit_price':buy_exit_price, 'buy_entry':buy_entry, 'buy_exit':buy_exit,
+    #     'sell_entry_price':sell_entry_price, 'sell_entry':sell_entry, 'sell_exit_price':sell_exit_price, 'sell_exit':sell_exit})#, index=ohlcv.index)
+    # entry_exit.to_csv('entry_exit.csv')
 
-    lots = 500 / ohlcv.close
-    # long_entry_price[:ignore] = 0
-    # long_exit_price[:ignore] = 0
-    # short_entry_price[:ignore] = 0
-    # short_exit_price[:ignore] = 0
+    return Backtest(**locals())
 
-    entry_exit = pd.DataFrame({'close':ohlcv.close, 'ask':ask, 'bid':bid,
-        'long_entry_price':long_entry_price, 'long_exit_price':long_exit_price, 'long_entry':long_entry, 'long_exit':long_exit,
-        'short_entry_price':short_entry_price, 'short_entry':short_entry, 'short_exit_price':short_exit_price, 'short_exit':short_exit})#, index=ohlcv.index)
-    entry_exit.to_csv('entry_exit.csv')
 
-    report = Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit,
-        stop_buy_entry=long_entry_price, stop_sell_entry=short_entry_price, stop_buy_exit=long_exit_price, stop_sell_exit=short_exit_price,
-        lots=lots, spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0, percent_of_equity=(1, 500))
-    return report
+if __name__ == '__main__':
 
-default_parameters = {
-    'asklength':55,
-    'bidlength':87,
-}
+    # テストデータ読み込み
+    ohlcv = pd.read_csv('csv/xbtusd_trade-20s.csv', index_col='timestamp', parse_dates=True)
 
-hyperopt_parameters = {
-    'asklength': hp.quniform('asklength', 1, 100, 1),
-    'bidlength': hp.quniform('bidlength', 1, 100, 1),
-}
+    default_parameters = {
+        'ohlcv': ohlcv,
+        'asklength':55,
+        'bidlength':87,
+    }
 
-BacktestIteration(shooter_backtest, default_parameters, hyperopt_parameters, 1000)
+    hyperopt_parameters = {
+        'asklength': hp.quniform('asklength', 1, 100, 1),
+        'bidlength': hp.quniform('bidlength', 1, 100, 1),
+    }
+
+    best, report = BacktestIteration(shooter_backtest, default_parameters, hyperopt_parameters, 0)

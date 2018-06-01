@@ -1,57 +1,53 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
-import numpy as np
 from backtest import Backtest, BacktestReport, BacktestIteration
 from hyperopt import hp
 from indicator import *
 from functools import lru_cache
 
-# テストデータ読み込み
-ohlcv = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
+def rci_cross_backtest(ohlcv, rcilength, overBought, overSold,):
 
-@lru_cache(maxsize=None)
-def cached_rci(period):
-    return rci(ohlcv.close, period)
-
-def rci_cross_backtest(fastlen, slowlen):
+    @lru_cache(maxsize=None)
+    def cached_rci(period):
+        return fastrci(ohlcv.close, period)
 
     # インジケーター作成
-    vfastrci = cached_rci(fastlen)
-    vslowrci = cached_rci(slowlen)
+    vrci = cached_rci(rcilength)
 
     # エントリー／イグジット
-    long_entry = crossover(vfastrci, vslowrci)
-    short_entry = crossunder(vfastrci, vslowrci)
-    long_exit = short_entry
-    short_exit = long_entry
+    buy_entry = crossover(vrci, overBought)
+    sell_entry = crossunder(vrci, overSold)
+    buy_exit = sell_entry
+    sell_exit = buy_entry
 
-    long_entry_price = None
-    long_exit_price = None
-    short_entry_price = None
-    short_exit_price = None
+    ignore = int(max([rcilength]))
+    buy_entry[:ignore] = False
+    buy_exit[:ignore] = False
+    sell_entry[:ignore] = False
+    sell_exit[:ignore] = False
 
-    ignore = int(max([fastlen, slowlen]))
-    long_entry[:ignore] = False
-    long_exit[:ignore] = False
-    short_entry[:ignore] = False
-    short_exit[:ignore] = False
-
-    entry_exit = pd.DataFrame({'close':ohlcv.close, 'fast':vfastrci, 'slow':vslowrci,
-    	'long_entry':long_entry, 'long_exit':long_exit, 'short_entry':short_entry, 'short_exit':short_exit})
+    entry_exit = pd.DataFrame({'close':ohlcv.close, 'rci':vrci,
+    	'buy_entry':buy_entry, 'buy_exit':buy_exit, 'sell_entry':sell_entry, 'sell_exit':sell_exit})
     entry_exit.to_csv('entry_exit.csv')
 
-    return Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit,
-        stop_buy_entry=long_entry_price, stop_sell_entry=short_entry_price, stop_buy_exit=long_exit_price, stop_sell_exit=short_exit_price,
-        lots=1, spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0)
+    return Backtest(**locals())
 
-default_parameters = {
-    'fastlen':25,
-    'slowlen':35,
-}
+if __name__ == '__main__':
 
-hyperopt_parameters = {
-    'fastlen': hp.quniform('fastlen', 2, 100, 1),
-    'slowlen': hp.quniform('slowlen', 2, 100, 1),
-}
+    # テストデータ読み込み
+    ohlcv = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
 
-BacktestIteration(rci_cross_backtest, default_parameters, hyperopt_parameters, 0)
+    default_parameters = {
+        'ohlcv': ohlcv,
+        'rcilength':25,
+        'overBought':70,
+        'overSold':-70,
+    }
+
+    hyperopt_parameters = {
+        'rcilength': hp.quniform('rcilength', 2, 100, 1),
+        'overBought': hp.quniform('overBought', -100, 100, 1),
+        'overSold': hp.quniform('overSold', -100, 100, 1),
+    }
+
+    best, report = BacktestIteration(rci_cross_backtest, default_parameters, hyperopt_parameters, 0)

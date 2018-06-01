@@ -5,46 +5,48 @@ from backtest import Backtest, BacktestReport, BacktestIteration
 from hyperopt import hp
 from indicator import *
 
-# テストデータ読み込み
-ohlcv = pd.read_csv('csv/bitmex_201801_1h.csv', index_col='timestamp', parse_dates=True)
-
-def sar_backtest(start, inc, max):
+def sar_backtest(ohlcv, start, inc, max):
     # インジケーター作成
     vsar = sar(ohlcv.high, ohlcv.low, start, inc, max)
 
     # エントリー／イグジット
-    long_entry_price = vsar
-    long_exit_price = vsar
-    short_entry_price = vsar
-    short_exit_price = vsar
+    buy_entry = crossover(vsar, ohlcv.close)
+    buy_exit = crossunder(vsar, ohlcv.close)
+    sell_entry = buy_exit
+    sell_exit = buy_entry
+    # stop_buy_entry = vsar.copy()
+    # stop_buy_exit = vsar.copy()
+    # stop_sell_entry = vsar.copy()
+    # stop_sell_exit = vsar.copy()
 
-    long_entry_price[ohlcv.high < vsar] = 0
-    short_entry_price[ohlcv.low > vsar] = 0
+    # stop_buy_entry[ohlcv.high < vsar] = 0
+    # stop_sell_entry[ohlcv.low > vsar] = 0
 
-    long_entry = None
-    long_exit = None
-    short_entry = None
-    short_exit = None
+    # entry_exit = pd.DataFrame({'close':ohlcv.close, 'high':ohlcv.high, 'low':ohlcv.low, 'sar':vsar,
+    #     'stop_buy_entry':stop_buy_entry, 'stop_buy_exit':stop_buy_exit,
+    #     'stop_sell_entry':stop_sell_entry, 'stop_sell_exit':stop_sell_exit, })
+    # entry_exit.to_csv('entry_exit.csv')
 
-    entry_exit = pd.DataFrame({'close':ohlcv.close, 'sar':vsar,
-        'long_entry_price':long_entry_price, 'long_exit_price':long_exit_price, 'long_entry':long_entry, 'long_exit':long_exit,
-        'short_entry_price':short_entry_price, 'short_entry':short_entry, 'short_exit_price':short_exit_price, 'short_exit':short_exit})#, index=ohlcv.index)
-    entry_exit.to_csv('entry_exit.csv')
+    return Backtest(**locals())
 
-    return Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit,
-        stop_buy_entry=long_entry_price, stop_sell_entry=short_entry_price, stop_buy_exit=long_exit_price, stop_sell_exit=short_exit_price,
-        lots=1, spread=0, take_profit=0, stop_loss=0, trailing_stop=0, slippage=0)
+if __name__ == '__main__':
 
-default_parameters = {
-    'start':0.15,
-    'inc':0.04,
-    'max':0.34,
-}
+    # テストデータ読み込み
+    ohlcv = pd.read_csv('csv/bitmex_2018_5m.csv', index_col='timestamp', parse_dates=True)
 
-hyperopt_parameters = {
-    'start': hp.quniform('start', 0.0, 0.1, 0.001),
-    'inc': hp.quniform('inc', 0.0, 0.1, 0.001),
-    'max': hp.quniform('max', 0.0, 0.3, 0.01),
-}
+    default_parameters = {
+        'ohlcv': ohlcv,
+        'start':0.012,
+        'inc':0.036,
+        'max':0.38,
+    }
 
-BacktestIteration(sar_backtest, default_parameters, hyperopt_parameters, 1000)
+    hyperopt_parameters = {
+        'start': hp.quniform('start', 0.0, 0.1, 0.001),
+        'inc': hp.quniform('inc', 0.0, 0.1, 0.001),
+        'max': hp.quniform('max', 0.0, 0.5, 0.01),
+    }
+
+    best, report = BacktestIteration(sar_backtest, default_parameters, hyperopt_parameters, 300)
+    report.DataFrame.to_csv('TradeData.csv')
+    report.Equity.to_csv('Equity.csv')
