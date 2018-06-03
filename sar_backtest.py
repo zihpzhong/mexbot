@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
-import numpy as np
 from backtest import Backtest, BacktestReport, BacktestIteration
 from hyperopt import hp
 from indicator import *
 
 def sar_backtest(ohlcv, start, inc, max):
     # インジケーター作成
-    vsar = sar(ohlcv.high, ohlcv.low, start, inc, max)
+    vsar = fastsar(ohlcv.high, ohlcv.low, start, inc, max)
 
     # エントリー／イグジット
     buy_entry = crossover(vsar, ohlcv.close)
@@ -44,7 +43,7 @@ if __name__ == '__main__':
     hyperopt_parameters = {
         'start': hp.quniform('start', 0.0, 0.1, 0.001),
         'inc': hp.quniform('inc', 0.0, 0.1, 0.001),
-        'max': hp.quniform('max', 0.0, 0.5, 0.01),
+        'max': hp.quniform('max', 0.2, 0.5, 0.01),
     }
 
     best, report = BacktestIteration(sar_backtest, default_parameters, hyperopt_parameters, 300)

@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
-from strategy import Strategy, Trading
+from strategy import Strategy
+import settings
+import logging
 
-class mylogic(Trading):
-    def setup(self, strategy):
-        pass
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("Sample")
 
-    def loop(self, ticker, ohlcv, position, balance, strategy):
-        print(ticker)
+def mylogic(ticker, ohlcv, position, balance, strategy):
+    pass
 
-
-strategy = Strategy(mylogic())
+strategy = Strategy(mylogic)
 strategy.settings.timeframe = '1m'
 strategy.settings.interval = 10
 strategy.settings.partial_ohlcv = True
-# strategy.testnet.use = True
-# strategy.testnet.apiKey = ''
-# strategy.testnet.secret = ''
+strategy.testnet.use = True
+strategy.testnet.apiKey = settings.testnet_apiKey
+strategy.testnet.secret = settings.testnet_secret
 strategy.start()

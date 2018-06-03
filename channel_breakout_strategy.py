@@ -66,13 +66,12 @@ if __name__ == '__main__':
     strategy.settings.interval = 10
     strategy.settings.apiKey = settings.apiKey
     strategy.settings.secret = settings.secret
-    strategy.testnet.use = False
+    strategy.testnet.use = True
     strategy.testnet.apiKey = settings.testnet_apiKey
     strategy.testnet.secret = settings.testnet_secret
 
     parser = strategy.add_arguments(argparse.ArgumentParser(description='Channel Breakout Bot'))
     parser.add_argument('--parameter', nargs=3, type=int, default=[breakout_in, breakout_out])
-    parser.add_argument('--percent', type=float, default=percent)
     args = parser.parse_args()
 
     logging.config.dictConfig(
@@ -81,6 +80,5 @@ if __name__ == '__main__':
 
     breakout_in = args.parameter[0]
     breakout_out = args.parameter[1]
-    percent = args.percent
 
     strategy.start(args)
