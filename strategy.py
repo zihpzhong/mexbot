@@ -9,13 +9,8 @@ import pandas as pd
 from utils import dotdict
 from indicator import last
 import argparse
+from bitmex_websocket import BitMEXWebsocket
 
-class Trading:
-    def setup(self, strategy):
-        pass
-
-    def loop(self, strategy):
-        pass
 
 def excahge_error(func):
     def wrapper(*args, **kwargs):
@@ -117,6 +112,13 @@ class Strategy:
         self.logger.info("TICK: bid {bid} ask {ask} last {last}".format(**ticker))
         return ticker
 
+    def fetch_ticker_ws(self):
+        trade = self.ws.recent_trades()[-1]
+        ticker = dotdict(self.ws.get_ticker())
+        ticker.datetime = pd.to_datetime(trade['timestamp'])
+        self.logger.info("TICK: bid {bid} ask {ask} last {last}".format(**ticker))
+        return ticker
+
     def fetch_ohlcv(self, symbol=None, timeframe=None):
         """過去100件のOHLCVを取得"""
         symbol = symbol or self.settings.symbol
@@ -163,6 +165,12 @@ class Strategy:
         self.logger.info("POSITION: qty {currentQty} cost {avgCostPrice} pnl {unrealisedPnl}({unrealisedPnlPcnt100:.2f}%) {realisedPnl}".format(**pos))
         return pos
 
+    def fetch_position_ws(self):
+        pos = dotdict(self.ws.position())
+        pos.unrealisedPnlPcnt100 = pos.unrealisedPnlPcnt * 100
+        self.logger.info("POSITION: qty {currentQty} cost {avgCostPrice} pnl {unrealisedPnl}({unrealisedPnlPcnt100:.2f}%) {realisedPnl}".format(**pos))
+        return pos
+
     def fetch_balance(self):
         """資産情報取得"""
         balance = dotdict(self.exchange.fetch_balance())
@@ -170,10 +178,28 @@ class Strategy:
         self.logger.info("BALANCE: free {free:.3f} used {used:.3f} total {total:.3f}".format(**balance.BTC))
         return balance
 
+    def fetch_balance_ws(self):
+        balance = dotdict(self.ws.funds())
+        balance.BTC = dotdict()
+        balance.BTC.free = balance.availableMargin * 0.00000001
+        balance.BTC.total = balance.marginBalance * 0.00000001
+        balance.BTC.used = balance.BTC.total - balance.BTC.free
+        self.logger.info("BALANCE: free {free:.3f} used {used:.3f} total {total:.3f}".format(**balance.BTC))
+        return balance
+
     def fetch_order(self, order_id):
         order = dotdict(self.exchange.fetch_order(order_id))
         order.info = dotdict(order.info)
         return order
+
+    def fetch_order_ws(self, order_id):
+        orders = self.ws.all_orders()
+        for o in orders:
+            if o['orderID'] == order_id:
+                order = dotdict(self.exchange.parse_order(o))
+                order.info = dotdict(order.info)
+                return order
+        raise ccxt.OrderNotFound('The order ' + order_id + ' not found.')
 
     @excahge_error
     def close_position(self, symbol=None):
@@ -284,7 +310,12 @@ class Strategy:
 
             if myid in self.orders:
                 order_id = self.orders[myid].id
-                order = self.fetch_order(order_id)
+                try:
+                    order = self.fetch_order_ws(order_id)
+                except ccxt.OrderNotFound as e:
+                    self.logger.warning(type(e).__name__ + ": {0}".format(e))
+                    order = dotdict({'status':'closed'})
+
                 # オープンの場合、注文を編集
                 if order.status == 'open':
                     # オーダータイプが異なる or STOP注文がトリガーされたら編集に失敗するのでキャンセルしてから新規注文する
@@ -341,8 +372,9 @@ class Strategy:
                     self.ohlcv_updated = True
 
     def setup(self):
+        self.logger.info("Setup Strategy")
+
         # 取引所セットアップ
-        self.logger.info("Setup Exchange")
         if self.testnet.use:
             self.exchange = getattr(ccxt, self.settings.exchange)({
                 'apiKey': self.testnet.apiKey,
@@ -374,6 +406,15 @@ class Strategy:
         self.cancel_order_all()
         self.close_position()
 
+        # ストリーミング設定
+        if self.testnet.use:
+            self.ws = BitMEXWebsocket(endpoint='wss://testnet.bitmex.com/realtime', symbol=market['id'],
+                api_key=self.testnet.apiKey, api_secret=self.testnet.secret)
+        else:
+            self.ws = BitMEXWebsocket(endpoint='wss://www.bitmex.com', symbol=market['id'],
+                api_key=self.settings.apiKey, api_secret=self.settings.secret)
+        self.ws.unsubscribe(['instrument', 'trade', 'quote', 'orderBookL2'])
+
     def add_arguments(self, parser):
         parser.add_argument('--apiKey', type=str, default=self.settings.apiKey)
         parser.add_argument('--secret', type=str, default=self.settings.secret)
@@ -390,9 +431,6 @@ class Strategy:
             self.settings.interval = args.interval
 
         self.setup()
-
-        if isinstance(self.yourlogic, Trading):
-            self.yourlogic.setup(self)
 
         self.logger.info("Start Trading")
 
@@ -413,10 +451,10 @@ class Strategy:
                 self.ticker = self.fetch_ticker()
 
                 # ポジション取得
-                self.position = self.fetch_position()
+                self.position = self.fetch_position_ws()
 
                 # 資金情報取得
-                self.balance = self.fetch_balance()
+                self.balance = self.fetch_balance_ws()
 
                 # 足取得（足確定後取得）
                 self.update_ohlcv(ticker_time=self.ticker.datetime)
@@ -429,10 +467,7 @@ class Strategy:
                     'position': self.position,
                     'balance': self.balance,
                 }
-                if isinstance(self.yourlogic, Trading):
-                    self.yourlogic.loop(**arg)
-                else:
-                    self.yourlogic(**arg)
+                self.yourlogic(**arg)
 
                 # 通常待ち
                 sleep(self.interval)
