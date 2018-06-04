@@ -414,7 +414,7 @@ class Strategy:
                 api_key=self.settings.apiKey, api_secret=self.settings.secret)
 
         # ネットワーク負荷の高いトピックの配信を停止
-        self.ws.unsubscribe(['instrument', 'trade', 'quote', 'orderBookL2'])
+        self.ws.unsubscribe(['orderBookL2'])
 
     def add_arguments(self, parser):
         parser.add_argument('--apiKey', type=str, default=self.settings.apiKey)
@@ -457,7 +457,7 @@ class Strategy:
                     errorWait = 0
 
                 # ティッカー取得
-                self.ticker = self.fetch_ticker()
+                self.ticker = self.fetch_ticker_ws()
 
                 # ポジション取得
                 self.position = self.fetch_position_ws()
