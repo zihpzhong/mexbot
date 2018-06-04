@@ -31,10 +31,10 @@ def channel_breakout_backtest(ohlcv, breakout_in, breakout_out, fastperiod, slow
     if klot > 0:
         fastsma = sma(ohlcv.close, fastperiod)
         slowsma = sma(ohlcv.close, slowperiod)
-        lots = (1 - (fastsma / slowsma)).abs()
-        lots = (1 - lots * klot)
-        lots.clip(0.01, 1.0, inplace=True)
-        lots = lots * 10
+        sell_size = 1 - ((1 - (slowsma / fastsma)) * klot)
+        sell_size.clip(0.01, 1.0, inplace=True)
+        buy_size  = 1 - ((1 - (fastsma / slowsma)) * klot)
+        buy_size.clip(0.01, 1.0, inplace=True)
 
     # ATRによるロット制限
     # if klot > 0:
@@ -55,9 +55,9 @@ def channel_breakout_backtest(ohlcv, breakout_in, breakout_out, fastperiod, slow
     #     lots = 1
 
     # バックテスト実施
-    entry_exit = pd.DataFrame({'close':ohlcv.close, 'open':ohlcv.open, 'lots':lots,
-        'stop_buy_entry':stop_buy_entry, 'stop_buy_exit':stop_buy_exit, 'stop_sell_entry':stop_sell_entry, 'stop_sell_exit':stop_sell_exit})#, index=ohlcv.index)
-    entry_exit.to_csv('entry_exit.csv')
+    # entry_exit = pd.DataFrame({'close':ohlcv.close, 'open':ohlcv.open,
+    #     'stop_buy_entry':stop_buy_entry, 'stop_buy_exit':stop_buy_exit, 'stop_sell_entry':stop_sell_entry, 'stop_sell_exit':stop_sell_exit})#, index=ohlcv.index)
+    # entry_exit.to_csv('entry_exit.csv')
 
     return Backtest(**locals())
 
@@ -70,19 +70,24 @@ if __name__ == '__main__':
         'ohlcv':ohlcv,
         'breakout_in':18,
         'breakout_out':18,
-        'fastperiod':89,
-        'slowperiod':91,
-        'filterth':19,
-        'klot':0,
+        # 'fastperiod':89,
+        # 'slowperiod':91,
+        # 'filterth':19,
+        'fastperiod':16,
+        'slowperiod':22,
+        'filterth':0,
+        'klot':428,
     }
 
     hyperopt_parameters = {
-        # 'breakout_in': hp.quniform('breakout_in', 1, 30, 1),
-        # 'breakout_out': hp.quniform('breakout_out', 1, 30, 1),
-        # 'fastperiod': hp.quniform('fastperiod', 1, 300, 10),
-        # 'slowperiod': hp.quniform('slowperiod', 1, 300, 10),
-        'filterth': hp.quniform('filterth', 1, 300, 1),
-        # 'klot': hp.loguniform('klot', 1, 10),
+        # 'breakout_in': hp.quniform('breakout_in', 1, 100, 1),
+        # 'breakout_out': hp.quniform('breakout_out', 1, 100, 1),
+        # 'fastperiod': hp.quniform('fastperiod', 1, 300, 1),
+        # 'slowperiod': hp.quniform('slowperiod', 1, 300, 1),
+        #'filterth': hp.quniform('filterth', 1, 300, 1),
+        'klot': hp.loguniform('klot', 1, 10),
     }
 
-    best, report = BacktestIteration(channel_breakout_backtest, default_parameters, hyperopt_parameters, 0)
+    best, report = BacktestIteration(channel_breakout_backtest, default_parameters, hyperopt_parameters, 0, maximize=lambda r:r.All.ProfitFactor)
+    report.DataFrame.to_csv('TradeData.csv')
+    report.Equity.to_csv('Equity.csv')

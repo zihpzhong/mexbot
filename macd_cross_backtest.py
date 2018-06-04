@@ -5,7 +5,7 @@ from hyperopt import hp
 from indicator import *
 from functools import lru_cache, wraps
 
-def macd_cross_backtest(ohlcv, fastlen, slowlen, siglen, smafastlen, smaslowlen, use_sma):
+def macd_cross_backtest(ohlcv, fastlen, slowlen, siglen, smafastlen, smaslowlen, use_sma, klot):
 
     @lru_cache(maxsize=None)
     def cached_sma(period):
@@ -40,12 +40,21 @@ def macd_cross_backtest(ohlcv, fastlen, slowlen, siglen, smafastlen, smaslowlen,
     sell_exit[:ignore] = False
 
     # ゼロラインフィルタ
-    buy_entry[vsig>0] = False
-    sell_entry[vsig<0] = False
+    # buy_entry[vsig>0] = False
+    # sell_entry[vsig<0] = False
 
-    # entry_exit = pd.DataFrame({'close':ohlcv.close, 'macd':vmacd, 'sig':vsig, #'fast':vfast, 'slow':vslow,
-    #     'buy_entry':buy_entry, 'buy_exit':buy_exit, 'sell_entry':sell_entry, 'sell_exit':sell_exit})#, index=ohlcv.index)
-    # entry_exit.to_csv('entry_exit.csv')
+    # 2つの移動平均線の剥離によるロット制限
+    if klot > 0:
+        fastsma = sma(ohlcv.close, smafastlen)
+        slowsma = sma(ohlcv.close, smaslowlen)
+        sell_size = 1 - ((1 - (slowsma / fastsma)) * klot)
+        sell_size.clip(0.01, 1.0, inplace=True)
+        buy_size  = 1 - ((1 - (fastsma / slowsma)) * klot)
+        buy_size.clip(0.01, 1.0, inplace=True)
+
+    entry_exit = pd.DataFrame({'close':ohlcv.close, 'macd':vmacd, 'sig':vsig, 'fsma':fastsma, 'ssma':slowsma, 'buy_size':buy_size, 'sell_size':sell_size,
+        'buy_entry':buy_entry, 'buy_exit':buy_exit, 'sell_entry':sell_entry, 'sell_exit':sell_exit})#, index=ohlcv.index)
+    entry_exit.to_csv('entry_exit.csv')
 
     return Backtest(**locals())
 
@@ -76,17 +85,21 @@ if __name__ == '__main__':
         'fastlen':19,
         'slowlen':27,
         'siglen':13,
-        'smafastlen':19,
-        'smaslowlen':27,
+        'smafastlen':10,
+        'smaslowlen':95,
         'use_sma':False,
+        'klot':1612,
     }
 
     hyperopt_parameters = {
-        'fastlen': hp.quniform('fastlen', 5, 50, 1),
-        'slowlen': hp.quniform('slowlen', 5, 50, 1),
-        'siglen': hp.quniform('siglen', 1, 50, 1),
-        # 'smafastlen': hp.quniform('smafastlen', 1, 50, 1),
-        # 'smaslowlen': hp.quniform('smaslowlen', 1, 50, 1),
+        # 'fastlen': hp.quniform('fastlen', 5, 50, 1),
+        # 'slowlen': hp.quniform('slowlen', 5, 50, 1),
+        # 'siglen': hp.quniform('siglen', 1, 50, 1),
+        'smafastlen': hp.quniform('smafastlen', 1, 100, 1),
+        'smaslowlen': hp.quniform('smaslowlen', 1, 100, 1),
+        'klot': hp.loguniform('klot', 1, 10),
     }
 
-    best, report = BacktestIteration(macd_cross_backtest, default_parameters, hyperopt_parameters, 0)
+    best, report = BacktestIteration(macd_cross_backtest, default_parameters, hyperopt_parameters, 0, maximize=lambda r:r.All.ProfitFactor)
+    report.DataFrame.to_csv('TradeData.csv')
+    report.Equity.to_csv('Equity.csv')
