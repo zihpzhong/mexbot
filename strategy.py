@@ -62,6 +62,7 @@ class Strategy:
         self.settings.symbol = 'BTC/USD'
         self.settings.apiKey = ''
         self.settings.secret = ''
+        self.settings.close_position_at_start_stop = False
 
         # 動作タイミング
         self.settings.interval = interval
@@ -188,8 +189,14 @@ class Strategy:
         return balance
 
     def fetch_order(self, order_id):
-        order = dotdict(self.exchange.fetch_order(order_id))
-        order.info = dotdict(order.info)
+        order = dotdict({'status':'closed', 'id':order_id})
+        try:
+            order = dotdict(self.exchange.fetch_order(order_id))
+            order.info = dotdict(order.info)
+        except ccxt.NotFound as e:
+            self.logger.warning(type(e).__name__ + ": {0}".format(e))
+        except ccxt.OrderNotFound as e:
+            self.logger.warning(type(e).__name__ + ": {0}".format(e))
         return order
 
     def fetch_order_ws(self, order_id):
@@ -199,7 +206,7 @@ class Strategy:
                 order = dotdict(self.exchange.parse_order(o))
                 order.info = dotdict(order.info)
                 return order
-        raise ccxt.OrderNotFound('The order ' + order_id + ' not found.')
+        return dotdict({'status':'closed', 'id':order_id})
 
     @excahge_error
     def close_position(self, symbol=None):
@@ -310,13 +317,9 @@ class Strategy:
 
             if myid in self.orders:
                 order_id = self.orders[myid].id
-                try:
-                    order = self.fetch_order_ws(order_id)
-                except ccxt.OrderNotFound as e:
-                    self.logger.warning(type(e).__name__ + ": {0}".format(e))
-                    order = dotdict({'status':'closed'})
+                order = self.fetch_order_ws(order_id)
 
-                # オープンの場合、注文を編集
+                # 未約定・部分約定の場合、注文を編集
                 if order.status == 'open':
                     # オーダータイプが異なる or STOP注文がトリガーされたら編集に失敗するのでキャンセルしてから新規注文する
                     order_type = 'stop' if stop is not None else ''
@@ -331,9 +334,12 @@ class Strategy:
                             (order.info.stopPx is not None and order.info.stopPx != stop) or
                             (order.info.orderQty is not None and order.info.orderQty != qty)):
                             order = self.edit_order(order_id, side, qty, limit, stop, trailing_offset, symbol)
-                # 注文がない場合、新規注文
+
+                # 約定済みの場合、新規注文
                 else:
                     order = self.create_order(side, qty, limit, stop, trailing_offset, symbol)
+
+            # 注文がない場合、新規注文
             else:
                 order = self.create_order(side, qty, limit, stop, trailing_offset, symbol)
 
@@ -372,8 +378,6 @@ class Strategy:
                     self.ohlcv_updated = True
 
     def setup(self):
-        self.logger.info("Setup Strategy")
-
         # 取引所セットアップ
         if self.testnet.use:
             self.exchange = getattr(ccxt, self.settings.exchange)({
@@ -401,11 +405,6 @@ class Strategy:
         self.logger.info('{symbol}: maker:{maker}'.format(**market))
         self.logger.info('{symbol}: type:{type}'.format(**market))
 
-        # 現在のポジションをすべて閉じる
-        self.logger.info("Cancel all orders and close position")
-        self.cancel_order_all()
-        self.close_position()
-
         # ストリーミング設定
         if self.testnet.use:
             self.ws = BitMEXWebsocket(endpoint='wss://testnet.bitmex.com/realtime', symbol=market['id'],
@@ -413,6 +412,8 @@ class Strategy:
         else:
             self.ws = BitMEXWebsocket(endpoint='wss://www.bitmex.com', symbol=market['id'],
                 api_key=self.settings.apiKey, api_secret=self.settings.secret)
+
+        # ネットワーク負荷の高いトピックの配信を停止
         self.ws.unsubscribe(['instrument', 'trade', 'quote', 'orderBookL2'])
 
     def add_arguments(self, parser):
@@ -430,7 +431,15 @@ class Strategy:
             self.settings.timeframe = args.timeframe
             self.settings.interval = args.interval
 
+        self.logger.info("Setup Strategy")
         self.setup()
+
+        # 全注文キャンセル
+        self.cancel_order_all()
+
+        # ポジションクローズ
+        if self.settings.close_position_at_start_stop:
+            self.close_position()
 
         self.logger.info("Start Trading")
 
@@ -484,9 +493,6 @@ class Strategy:
             except ccxt.AuthenticationError as e:
                 self.logger.warning(type(e).__name__ + ": {0}".format(e))
                 break
-            except ccxt.OrderNotFound as e:
-                self.logger.warning(type(e).__name__ + ": {0}".format(e))
-                errorWait = 0.5
             except ccxt.ExchangeError as e:
                 self.logger.warning(type(e).__name__ + ": {0}".format(e))
                 errorWait = 1
@@ -503,4 +509,5 @@ class Strategy:
         self.cancel_order_all()
 
         # ポジションクローズ
-        self.close_position()
+        if self.settings.close_position_at_start_stop:
+            self.close_position()
