@@ -36,13 +36,13 @@ def sma(source, period):
 def dsma(source, period):
     period = int(period)
     sma = source.rolling(period).mean()
-    return (sma * 2) - sma.rolling(period).mean()
+    return (sma * 2) - sma.rolling(period,min_periods=1).mean()
 
 def tsma(source, period):
     period = int(period)
     sma = source.rolling(period).mean()
-    sma2 = sma.rolling(period).mean()
-    return (sma * 3) - (sma2 * 3) + sma2.rolling(period).mean()
+    sma2 = sma.rolling(period,min_periods=1).mean()
+    return (sma * 3) - (sma2 * 3) + sma2.rolling(period,min_periods=1).mean()
 
 def ema(source, period):
     # alpha = 2.0 / (period + 1)
