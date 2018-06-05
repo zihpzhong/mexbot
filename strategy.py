@@ -317,7 +317,7 @@ class Strategy:
 
             if myid in self.orders:
                 order_id = self.orders[myid].id
-                order = self.fetch_order_ws(order_id)
+                order = self.fetch_order(order_id)
 
                 # 未約定・部分約定の場合、注文を編集
                 if order.status == 'open':
@@ -406,15 +406,15 @@ class Strategy:
         self.logger.info('{symbol}: type:{type}'.format(**market))
 
         # ストリーミング設定
-        if self.testnet.use:
-            self.ws = BitMEXWebsocket(endpoint='wss://testnet.bitmex.com/realtime', symbol=market['id'],
-                api_key=self.testnet.apiKey, api_secret=self.testnet.secret)
-        else:
-            self.ws = BitMEXWebsocket(endpoint='wss://www.bitmex.com', symbol=market['id'],
-                api_key=self.settings.apiKey, api_secret=self.settings.secret)
+        # if self.testnet.use:
+        #     self.ws = BitMEXWebsocket(endpoint='wss://testnet.bitmex.com/realtime', symbol=market['id'],
+        #         api_key=self.testnet.apiKey, api_secret=self.testnet.secret)
+        # else:
+        #     self.ws = BitMEXWebsocket(endpoint='wss://www.bitmex.com', symbol=market['id'],
+        #         api_key=self.settings.apiKey, api_secret=self.settings.secret)
 
         # ネットワーク負荷の高いトピックの配信を停止
-        self.ws.unsubscribe(['orderBookL2'])
+        # self.ws.unsubscribe(['orderBookL2'])
 
     def add_arguments(self, parser):
         parser.add_argument('--apiKey', type=str, default=self.settings.apiKey)
@@ -457,13 +457,13 @@ class Strategy:
                     errorWait = 0
 
                 # ティッカー取得
-                self.ticker = self.fetch_ticker_ws()
+                self.ticker = self.fetch_ticker()
 
                 # ポジション取得
-                self.position = self.fetch_position_ws()
+                self.position = self.fetch_position()
 
                 # 資金情報取得
-                self.balance = self.fetch_balance_ws()
+                self.balance = self.fetch_balance()
 
                 # 足取得（足確定後取得）
                 self.update_ohlcv(ticker_time=self.ticker.datetime)
