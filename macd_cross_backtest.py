@@ -3,9 +3,9 @@ import pandas as pd
 from backtest import Backtest, BacktestIteration
 from hyperopt import hp
 from indicator import *
-from functools import lru_cache, wraps
+from functools import lru_cache
 
-def macd_cross_backtest(ohlcv, fastlen, slowlen, siglen, smafastlen, smaslowlen, use_sma, klot):
+def macd_cross_backtest(ohlcv, fastlen, slowlen, siglen, smafastlen, smaslowlen, filter, shrink):
 
     @lru_cache(maxsize=None)
     def cached_sma(period):
@@ -19,17 +19,10 @@ def macd_cross_backtest(ohlcv, fastlen, slowlen, siglen, smafastlen, smaslowlen,
 
     # インジケーター作成
     vmacd, vsig, vhist = cached_macd(fastlen, slowlen, siglen)
-    if use_sma:
-        vfast = cached_sma(smafastlen)
-        vslow = cached_sma(smaslowlen)
 
     # エントリー／イグジット
-    if use_sma:
-        buy_entry = crossover(vmacd, vsig) | crossover(vfast, vslow)
-        sell_entry = crossunder(vmacd, vsig) | crossunder(vfast, vslow)
-    else:
-        buy_entry = crossover(vmacd, vsig)
-        sell_entry = crossunder(vmacd, vsig)
+    buy_entry = crossover(vmacd, vsig)
+    sell_entry = crossunder(vmacd, vsig)
     buy_exit = sell_entry.copy()
     sell_exit = buy_entry.copy()
 
@@ -39,22 +32,32 @@ def macd_cross_backtest(ohlcv, fastlen, slowlen, siglen, smafastlen, smaslowlen,
     sell_entry[:ignore] = False
     sell_exit[:ignore] = False
 
+    if filter:
+        fastsma = sma(ohlcv.close, smafastlen)
+        slowsma = sma(ohlcv.close, smaslowlen)
+        buy_entry[fastsma < slowsma] = False
+        sell_entry[fastsma > slowsma] = False
+
     # ゼロラインフィルタ
     # buy_entry[vsig>0] = False
     # sell_entry[vsig<0] = False
 
     # 2つの移動平均線の剥離によるロット制限
-    if klot > 0:
+    if shrink:
         fastsma = sma(ohlcv.close, smafastlen)
         slowsma = sma(ohlcv.close, smaslowlen)
-        sell_size = 1 - ((1 - (slowsma / fastsma)) * klot)
-        sell_size.clip(0.01, 1.0, inplace=True)
-        buy_size  = 1 - ((1 - (fastsma / slowsma)) * klot)
-        buy_size.clip(0.01, 1.0, inplace=True)
+        upper = 1.00
+        lower = 0.01
+        sell_size = lower + (slowsma > fastsma) * (upper - lower)
+        buy_size = lower + (fastsma > slowsma) * (upper - lower)
+        # sell_size = 1 - ((1 - (slowsma / fastsma)) * klot)
+        # sell_size.clip(0.01, 1.0, inplace=True)
+        # buy_size  = 1 - ((1 - (fastsma / slowsma)) * klot)
+        # buy_size.clip(0.01, 1.0, inplace=True)
 
-    entry_exit = pd.DataFrame({'close':ohlcv.close, 'macd':vmacd, 'sig':vsig, 'fsma':fastsma, 'ssma':slowsma, 'buy_size':buy_size, 'sell_size':sell_size,
-        'buy_entry':buy_entry, 'buy_exit':buy_exit, 'sell_entry':sell_entry, 'sell_exit':sell_exit})#, index=ohlcv.index)
-    entry_exit.to_csv('entry_exit.csv')
+    # entry_exit = pd.DataFrame({'close':ohlcv.close, 'macd':vmacd, 'sig':vsig, 'fsma':fastsma, 'ssma':slowsma, 'buy_size':buy_size, 'sell_size':sell_size,
+    #     'buy_entry':buy_entry, 'buy_exit':buy_exit, 'sell_entry':sell_entry, 'sell_exit':sell_exit})#, index=ohlcv.index)
+    # entry_exit.to_csv('entry_exit.csv')
 
     return Backtest(**locals())
 
@@ -87,17 +90,16 @@ if __name__ == '__main__':
         'siglen':13,
         'smafastlen':10,
         'smaslowlen':95,
-        'use_sma':False,
-        'klot':1612,
+        'filter':False,
+        'shrink':True,
     }
 
     hyperopt_parameters = {
-        # 'fastlen': hp.quniform('fastlen', 5, 50, 1),
-        # 'slowlen': hp.quniform('slowlen', 5, 50, 1),
-        # 'siglen': hp.quniform('siglen', 1, 50, 1),
-        'smafastlen': hp.quniform('smafastlen', 1, 100, 1),
-        'smaslowlen': hp.quniform('smaslowlen', 1, 100, 1),
-        'klot': hp.loguniform('klot', 1, 10),
+        'fastlen': hp.quniform('fastlen', 5, 50, 1),
+        'slowlen': hp.quniform('slowlen', 5, 50, 1),
+        'siglen': hp.quniform('siglen', 1, 50, 1),
+        # 'smafastlen': hp.quniform('smafastlen', 1, 100, 1),
+        # 'smaslowlen': hp.quniform('smaslowlen', 1, 100, 1),
     }
 
     best, report = BacktestIteration(macd_cross_backtest, default_parameters, hyperopt_parameters, 0, maximize=lambda r:r.All.ProfitFactor)
