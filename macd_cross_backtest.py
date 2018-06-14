@@ -17,6 +17,12 @@ def macd_cross_backtest(ohlcv, fastlen, slowlen, siglen, smafastlen, smaslowlen,
         signal = macd.rolling(int(siglen)).mean()
         return (macd, signal, macd-signal)
 
+    @lru_cache(maxsize=None)
+    def cached_fund():
+        fund = pd.read_csv('csv/bitmex_funding.csv', index_col='timestamp', parse_dates=True)
+        fund = pd.DataFrame(fund, index=ohlcv.index).interpolate()
+        return fund
+
     # インジケーター作成
     vmacd, vsig, vhist = cached_macd(fastlen, slowlen, siglen)
 
@@ -32,30 +38,42 @@ def macd_cross_backtest(ohlcv, fastlen, slowlen, siglen, smafastlen, smaslowlen,
     sell_entry[:ignore] = False
     sell_exit[:ignore] = False
 
+    # 資金調達率によるエントリー制限
+    if 0:
+        fund = cached_fund()
+        buy_entry[fund.fundingRate > 0.000] = False
+        sell_entry[fund.fundingRate < 0.000] = False
+        buy_exit[fund.fundingRate < 0.000] = False
+        sell_exit[fund.fundingRate > 0.000] = False
+
+    # 2つの移動平均線によるエントリー制限
     if filter:
         fastsma = sma(ohlcv.close, smafastlen)
         slowsma = sma(ohlcv.close, smaslowlen)
-        buy_entry[fastsma < slowsma] = False
+        buy_entry[slowsma > fastsma] = False
         sell_entry[fastsma > slowsma] = False
 
     # ゼロラインフィルタ
-    # buy_entry[vsig>0] = False
-    # sell_entry[vsig<0] = False
+    if 0:
+        buy_entry[vsig>0] = False
+        sell_entry[vsig<0] = False
 
-    # 2つの移動平均線の剥離によるロット制限
+    # 2つの移動平均線によるロット制限
     if shrink:
         fastsma = sma(ohlcv.close, smafastlen)
         slowsma = sma(ohlcv.close, smaslowlen)
-        upper = 1.00
-        lower = 0.01
-        sell_size = lower + (slowsma > fastsma) * (upper - lower)
-        buy_size = lower + (fastsma > slowsma) * (upper - lower)
-        # sell_size = 1 - ((1 - (slowsma / fastsma)) * klot)
-        # sell_size.clip(0.01, 1.0, inplace=True)
-        # buy_size  = 1 - ((1 - (fastsma / slowsma)) * klot)
-        # buy_size.clip(0.01, 1.0, inplace=True)
+        upper = 1.999
+        lower = 0.001
+        buy_size = upper - ((slowsma > fastsma) * (upper - lower))
+        buy_size = buy_size.shift(1)    # フィルターの条件と合わせるためシフトする
+        sell_size = upper - ((fastsma > slowsma) * (upper - lower))
+        sell_size = sell_size.shift(1)  # 注文は次の足で行われる
 
-    # entry_exit = pd.DataFrame({'close':ohlcv.close, 'macd':vmacd, 'sig':vsig, 'fsma':fastsma, 'ssma':slowsma, 'buy_size':buy_size, 'sell_size':sell_size,
+    # buy_size = sell_size = 3000 / ohlcv.close
+    # initial_capital = 500
+    # percent_of_equity = 0.5
+
+    # entry_exit = pd.DataFrame({'close':ohlcv.close, 'macd':vmacd, 'sig':vsig, #'fsma':fastsma, 'ssma':slowsma, 'buy_size':buy_size, 'sell_size':sell_size,
     #     'buy_entry':buy_entry, 'buy_exit':buy_exit, 'sell_entry':sell_entry, 'sell_exit':sell_exit})#, index=ohlcv.index)
     # entry_exit.to_csv('entry_exit.csv')
 
@@ -91,7 +109,7 @@ if __name__ == '__main__':
         'smafastlen':10,
         'smaslowlen':95,
         'filter':False,
-        'shrink':True,
+        'shrink':False,
     }
 
     hyperopt_parameters = {

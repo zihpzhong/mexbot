@@ -1,65 +1,58 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
-import numpy as np
 from datetime import datetime
 from backtest import Backtest, BacktestReport, BacktestIteration
 from hyperopt import hp
 from indicator import *
+from functools import lru_cache
 
-# テストデータ読み込み
-ohlcv = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
+def shooter_backtest(ohlcv, smalength, overshoot, undershoot):
 
-def deviation(source, period):
-    base = source.rolling(int(period)).mean()
-    return (base, ((source - base) / base) * 100)
-
-def shooter_backtest(smalength, overshoot, undershoot):
+    @lru_cache(maxsize=None)
+    def deviation(period):
+        base = ohlcv.close.rolling(int(period)).mean()
+        return (base, ((ohlcv.close - base) / base) * 100)
 
     # インジケーター作成
-    vsma, vdev = deviation(ohlcv.close, smalength)
+    vsma, vdev = deviation(smalength)
 
     # エントリー／イグジット
-    long_entry = None
-    short_entry = None
-    long_exit = None
-    short_exit = None
+    buy_entry = vdev < -undershoot
+    sell_entry = vdev > overshoot
+    buy_exit = vdev <= 0
+    sell_exit = vdev >= 0
 
-    long_entry_price = None
-    long_exit_price = None
-    short_entry_price = None
-    short_exit_price = None
+    ignore = int(smalength)
+    buy_entry[:ignore] = False
+    buy_exit[:ignore] = False
+    sell_entry[:ignore] = False
+    sell_exit[:ignore] = False
 
-    # ignore = int(smalength)
-    # long_entry[:ignore] = False
-    # long_exit[:ignore] = False
-    # short_entry[:ignore] = False
-    # short_exit[:ignore] = False
+    # entry_exit = pd.DataFrame({'close':ohlcv.close,
+    #     'buy_entry':buy_entry, 'buy_exit':buy_exit, 'sell_entry':sell_entry, 'sell_exit':sell_exit})
+    # entry_exit.to_csv('entry_exit.csv')
 
-    # long_entry_price[:ignore] = 0
-    # long_exit_price[:ignore] = 0
-    # short_entry_price[:ignore] = 0
-    # short_exit_price[:ignore] = 0
+    return Backtest(**locals())
 
-    entry_exit = pd.DataFrame({'close':ohlcv.close, 'deviation':vdev, 'sma':vsma,
-        'long_entry_price':long_entry_price, 'long_exit_price':long_exit_price, 'long_entry':long_entry, 'long_exit':long_exit,
-        'short_entry_price':short_entry_price, 'short_entry':short_entry, 'short_exit_price':short_exit_price, 'short_exit':short_exit})#, index=ohlcv.index)
-    entry_exit.to_csv('entry_exit.csv')
 
-    report = Backtest(ohlcv, buy_entry=long_entry, sell_entry=short_entry, buy_exit=long_exit, sell_exit=short_exit,
-        stop_buy_entry=long_entry_price, stop_sell_entry=short_entry_price, stop_buy_exit=long_exit_price, stop_sell_exit=short_exit_price,
-        lots=1, spread=0, take_profit=0, stop_loss=0, trailing_stop=20, slippage=0)
-    return report
+if __name__ == '__main__':
 
-default_parameters = {
-    'smalength':20,
-    'overshoot':0.005,
-    'undershoot':0.005,
-}
+    # テストデータ読み込み
+    ohlcv = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
 
-hyperopt_parameters = {
-    'smalength': hp.quniform('smalength', 1, 75, 1),
-    'overshoot': hp.uniform('overshoot', 0.0001, 0.2),
-    'undershoot': hp.uniform('undershoot', 0.0001, 0.2),
-}
+    default_parameters = {
+        'ohlcv':ohlcv,
+        'smalength':20,
+        'overshoot':0.005,
+        'undershoot':0.005,
+    }
 
-BacktestIteration(shooter_backtest, default_parameters, hyperopt_parameters, 0)
+    hyperopt_parameters = {
+        'smalength': hp.quniform('smalength', 1, 100, 1),
+        'overshoot': hp.uniform('overshoot', 0.1, 20.0),
+        'undershoot': hp.uniform('undershoot', 0.1, 20.0),
+    }
+
+    best, report = BacktestIteration(shooter_backtest, default_parameters, hyperopt_parameters, 300, maximize=lambda r:r.All.ProfitFactor)
+    report.DataFrame.to_csv('TradeData.csv')
+    report.Equity.to_csv('Equity.csv')

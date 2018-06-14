@@ -6,26 +6,29 @@ from indicator import *
 from functools import lru_cache
 
 
-def shooter_backtest(ohlcv, asklength, bidlength):
-
-    buysize = ohlcv['buy_volume']
-    sellsize = ohlcv['sell_volume']
+def quote_backtest(ohlcv, asklength, bidlength):
 
     @lru_cache(maxsize=None)
     def cached_buysize(period):
-        return sma(buysize, period)
+        #buysize = change(ohlcv['buy_volume'])
+        #return sma(buysize, period)
+        buysize = (ohlcv['buy_volume'])
+        return rsi(buysize, period)
 
     @lru_cache(maxsize=None)
     def cached_sellsize(period):
-        return sma(sellsize, period)
+        #sellsize = change(ohlcv['sell_volume'])
+        #return sma(sellsize, period)
+        sellsize = (ohlcv['sell_volume'])
+        return rsi(sellsize, period)
 
     # インジケーター作成
     bid = cached_buysize(bidlength)
     ask = cached_sellsize(asklength)
 
     # エントリー／イグジット
-    buy_entry = bid > ask
-    sell_entry = ask > bid
+    buy_entry = (bid > ask)
+    sell_entry = (bid < ask)
     buy_exit = sell_entry
     sell_exit = buy_entry
 
@@ -35,11 +38,9 @@ def shooter_backtest(ohlcv, asklength, bidlength):
     sell_entry[:ignore] = False
     sell_exit[:ignore] = False
 
-    #buy_size = sell_size = 500 / ohlcv.close
-    # entry_exit = pd.DataFrame({'close':ohlcv.close, 'ask':ask, 'bid':bid,
-    #     'buy_entry_price':buy_entry_price, 'buy_exit_price':buy_exit_price, 'buy_entry':buy_entry, 'buy_exit':buy_exit,
-    #     'sell_entry_price':sell_entry_price, 'sell_entry':sell_entry, 'sell_exit_price':sell_exit_price, 'sell_exit':sell_exit})#, index=ohlcv.index)
-    # entry_exit.to_csv('entry_exit.csv')
+    entry_exit = pd.DataFrame({'close':ohlcv.close, 'ask':ask, 'bid':bid,
+        'buy_entry':buy_entry, 'buy_exit':buy_exit, 'sell_entry':sell_entry, 'sell_exit':sell_exit})
+    entry_exit.to_csv('entry_exit.csv')
 
     return Backtest(**locals())
 
@@ -51,13 +52,15 @@ if __name__ == '__main__':
 
     default_parameters = {
         'ohlcv': ohlcv,
-        'asklength':55,
-        'bidlength':87,
+        'asklength':26,
+        'bidlength':20,
     }
 
     hyperopt_parameters = {
-        'asklength': hp.quniform('asklength', 1, 100, 1),
-        'bidlength': hp.quniform('bidlength', 1, 100, 1),
+        'asklength': hp.quniform('asklength', 10, 100, 1),
+        'bidlength': hp.quniform('bidlength', 10, 100, 1),
     }
 
-    best, report = BacktestIteration(shooter_backtest, default_parameters, hyperopt_parameters, 0)
+    best, report = BacktestIteration(quote_backtest, default_parameters, hyperopt_parameters, 0, maximize=lambda r:r.All.Profit)
+    report.DataFrame.to_csv('TradeData.csv')
+    report.Equity.to_csv('Equity.csv')
