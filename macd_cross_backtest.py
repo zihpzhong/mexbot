@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import sys
 import pandas as pd
 from backtest import Backtest, BacktestIteration
 from hyperopt import hp
@@ -89,11 +90,12 @@ if __name__ == '__main__':
         return dateutil.parser.parse(str)
 
     parser = argparse.ArgumentParser(description="")
+    parser.add_argument('csv', nargs='?', type=argparse.FileType('r'), default=sys.stdin)
     parser.add_argument("--start", type=store_datetime)
     parser.add_argument("--end", type=store_datetime)
     args = parser.parse_args()
 
-    ohlcv = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
+    ohlcv = pd.read_csv(args.csv, index_col='timestamp', parse_dates=True)
     if args.start is not None and args.end is not None:
         ohlcv = ohlcv[args.start:args.end]
     elif args.start is None:
