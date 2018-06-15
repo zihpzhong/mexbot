@@ -63,7 +63,7 @@ def BacktestCore(Open, High, Low, Close, N,
             if OpenPrice > 0:
                 execPrice = OpenPrice + spread + slippage
                 LongTrade[i] = execPrice #買いポジションオープン
-                execLot =  calclots(capital, OpenPrice, percent, buy_size[i])
+                execLot =  calclots(capital, OpenPrice, percent, buy_size[i-1])
                 buyExecPrice = ((execPrice*execLot)+(buyExecPrice*buyExecLot))/(buyExecLot+execLot)
                 buyExecLot = buyExecLot + execLot
                 BuyNow = True
@@ -110,7 +110,7 @@ def BacktestCore(Open, High, Low, Close, N,
             if OpenPrice:
                 execPrice = OpenPrice - slippage
                 ShortTrade[i] = execPrice #売りポジションオープン
-                execLot = calclots(capital, OpenPrice, percent, sell_size[i])
+                execLot = calclots(capital, OpenPrice, percent, sell_size[i-1])
                 sellExecPrice = ((execPrice*execLot)+(sellExecPrice*sellExecLot))/(sellExecLot+execLot)
                 sellExecLot = sellExecLot + execLot
                 SellNow = True
