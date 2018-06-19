@@ -85,11 +85,18 @@ def BacktestCore(Open, High, Low, Close, N,
                 buyStopExit = 0
             # 注文執行
             if ClosePrice > 0:
+                if buyExecLot > buy_size[i-1]:
+                    buy_exit_lot = buy_size[i-1]
+                    buy_exec_price = buyExecPrice
+                    buyExecLot = buyExecLot - buy_size[i-1]
+                else:
+                    buy_exit_lot = buyExecLot
+                    buy_exec_price = buyExecPrice
+                    buyExecPrice = buyExecLot = 0
                 ClosePrice = ClosePrice - slippage
                 LongTrade[i] = -ClosePrice #買いポジションクローズ
-                LongPL[i] = (ClosePrice - buyExecPrice) * buyExecLot #損益確定
-                LongPct[i] = LongPL[i] / buyExecPrice
-                buyExecPrice = buyExecLot = 0
+                LongPL[i] = (ClosePrice - buy_exec_price) * buy_exit_lot #損益確定
+                LongPct[i] = LongPL[i] / buy_exec_price
 
         # 売り注文処理
         if sellExecLot < max_sell_size:
@@ -132,26 +139,37 @@ def BacktestCore(Open, High, Low, Close, N,
                 sellStopExit = 0
             # 注文執行
             if ClosePrice > 0:
+                if sellExecLot > sell_size[i-1]:
+                    sell_exit_lot = sell_size[i-1]
+                    sell_exec_price = sellExecPrice
+                    sellExecLot = sellExecLot - sell_exit_lot
+                else:
+                    sell_exit_lot = sellExecLot
+                    sell_exec_price = sellExecPrice
+                    sellExecPrice = sellExecLot = 0
                 ClosePrice = ClosePrice + spread + slippage
                 ShortTrade[i] = -ClosePrice #売りポジションクローズ
-                ShortPL[i] = (sellExecPrice - ClosePrice) * sellExecLot #損益確定
-                ShortPct[i] = ShortPL[i] / sellExecPrice
-                sellExecPrice = sellExecLot = 0
+                ShortPL[i] = (sell_exec_price - ClosePrice) * sell_exit_lot #損益確定
+                ShortPct[i] = ShortPL[i] / sell_exec_price
 
         # 利確 or 損切によるポジションの決済(エントリーと同じ足で決済しない)
         if buyExecPrice > 0 and not BuyNow:
             ClosePrice = 0
             if stop_loss > 0:
-                # 損切判定 Open -> Low
+                # 損切判定
                 StopPrice = buyExecPrice - stop_loss
                 if Low[i] <= StopPrice:
-                    ClosePrice = StopPrice - slippage
+                    if Open[i] >= StopPrice:
+                        ClosePrice = StopPrice
+                    else:
+                        ClosePrice = Open[i]
             elif take_profit > 0:
                 # 利確判定
                 LimitPrice = buyExecPrice + take_profit
                 if High[i] >= LimitPrice:
-                    ClosePrice = LimitPrice - slippage
+                    ClosePrice = LimitPrice
             if ClosePrice > 0:
+                ClosePrice = ClosePrice - slippage
                 LongTrade[i] = -ClosePrice #買いポジションクローズ
                 LongPL[i] = (ClosePrice - buyExecPrice) * buyExecLot #損益確定
                 LongPct[i] = LongPL[i] / buyExecPrice
@@ -160,16 +178,20 @@ def BacktestCore(Open, High, Low, Close, N,
         if sellExecPrice > 0 and not SellNow:
             ClosePrice = 0
             if stop_loss > 0:
-                # 損切判定 Open -> High
+                # 損切判定
                 StopPrice = sellExecPrice + stop_loss
                 if High[i] >= StopPrice:
-                    ClosePrice = StopPrice + slippage
+                    if Open[i] <= StopPrice:
+                        ClosePrice = StopPrice
+                    else:
+                        ClosePrice = Open[i]
             elif take_profit > 0:
                 # 利確判定
                 LimitPrice = sellExecPrice - take_profit
                 if Low[i] <= LimitPrice:
-                    ClosePrice = LimitPrice + slippage
+                    ClosePrice = LimitPrice
             if ClosePrice > 0:
+                ClosePrice = ClosePrice + slippage
                 ShortTrade[i] = -ClosePrice #売りポジションクローズ
                 ShortPL[i] = (sellExecPrice - ClosePrice) * sellExecLot #損益確定
                 ShortPct[i] = ShortPL[i] / sellExecPrice
