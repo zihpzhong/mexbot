@@ -22,7 +22,7 @@ def calclots(capital, price, percent, lot):
     b1[:],b1[:],b1[:],b1[:],
     f8[:],f8[:],f8[:],f8[:],
     f8[:],f8[:],f8,f8,
-    f8,f8,f8,f8,f8,f8,f8,
+    f8,f8[:],f8[:],f8,f8,f8,f8,
     f8[:],f8[:],f8[:],f8[:],f8[:],f8[:]), nopython=True)
 def BacktestCore(Open, High, Low, Close, N,
     buy_entry, sell_entry, buy_exit, sell_exit,
@@ -155,17 +155,17 @@ def BacktestCore(Open, High, Low, Close, N,
         # 利確 or 損切によるポジションの決済(エントリーと同じ足で決済しない)
         if buyExecPrice > 0 and not BuyNow:
             ClosePrice = 0
-            if stop_loss > 0:
+            if stop_loss[i-1] > 0:
                 # 損切判定
-                StopPrice = buyExecPrice - stop_loss
+                StopPrice = buyExecPrice - stop_loss[i-1]
                 if Low[i] <= StopPrice:
                     if Open[i] >= StopPrice:
                         ClosePrice = StopPrice
                     else:
                         ClosePrice = Open[i]
-            elif take_profit > 0:
+            elif take_profit[i-1] > 0:
                 # 利確判定
-                LimitPrice = buyExecPrice + take_profit
+                LimitPrice = buyExecPrice + take_profit[i-1]
                 if High[i] >= LimitPrice:
                     ClosePrice = LimitPrice
             if ClosePrice > 0:
@@ -177,17 +177,17 @@ def BacktestCore(Open, High, Low, Close, N,
 
         if sellExecPrice > 0 and not SellNow:
             ClosePrice = 0
-            if stop_loss > 0:
+            if stop_loss[i-1] > 0:
                 # 損切判定
-                StopPrice = sellExecPrice + stop_loss
+                StopPrice = sellExecPrice + stop_loss[i-1]
                 if High[i] >= StopPrice:
                     if Open[i] <= StopPrice:
                         ClosePrice = StopPrice
                     else:
                         ClosePrice = Open[i]
-            elif take_profit > 0:
+            elif take_profit[i-1] > 0:
                 # 利確判定
-                LimitPrice = sellExecPrice - take_profit
+                LimitPrice = sellExecPrice - take_profit[i-1]
                 if Low[i] <= LimitPrice:
                     ClosePrice = LimitPrice
             if ClosePrice > 0:
@@ -246,6 +246,14 @@ def Backtest(ohlcv,
         sell_size = sell_size.values
     else:
         sell_size = np.full(shape=(N), fill_value=float(sell_size))
+    if isinstance(take_profit, pd.Series):
+        take_profit = take_profit.values
+    else:
+        take_profit = np.full(shape=(N), fill_value=float(take_profit))
+    if isinstance(stop_loss, pd.Series):
+        stop_loss = stop_loss.values
+    else:
+        stop_loss = np.full(shape=(N), fill_value=float(stop_loss))
 
     buy_entry = bool_place_holder if buy_entry is None else buy_entry.values
     sell_entry = bool_place_holder if sell_entry is None else sell_entry.values
@@ -269,7 +277,7 @@ def Backtest(ohlcv,
         buy_entry, sell_entry, buy_exit, sell_exit,
         stop_buy_entry, stop_sell_entry, stop_buy_exit, stop_sell_exit,
         buy_size, sell_size, max_buy_size, max_sell_size,
-        float(spread), float(take_profit), float(stop_loss), float(trailing_stop), float(slippage), float(percent), float(capital),
+        float(spread), take_profit, stop_loss, float(trailing_stop), float(slippage), float(percent), float(capital),
         LongTrade, LongPL, LongPct, ShortTrade, ShortPL, ShortPct)
 
     return BacktestReport(pd.DataFrame({
@@ -289,27 +297,34 @@ class BacktestReport:
         self.Long.PL = LongPL
         self.Long.Pct = DataFrame['LongPct']
         self.Long.Trades = np.count_nonzero(LongPL)
-        self.Long.GrossProfit = LongPL.clip_lower(0).sum()
-        self.Long.GrossLoss =  LongPL.clip_upper(0).sum()
-        self.Long.Profit = self.Long.GrossProfit + self.Long.GrossLoss
-        self.Long.Ratio = self.Long.GrossProfit + self.Long.GrossLoss
-        self.Long.AvgReturn = self.Long.Pct[self.Long.Pct!=0].mean()
+        if self.Long.Trades > 0:
+            self.Long.GrossProfit = LongPL.clip_lower(0).sum()
+            self.Long.GrossLoss =  LongPL.clip_upper(0).sum()
+            self.Long.Profit = self.Long.GrossProfit + self.Long.GrossLoss
+            self.Long.AvgReturn = self.Long.Pct[self.Long.Pct!=0].mean()
+        else:
+            self.Long.GrossProfit = 0.0
+            self.Long.GrossLoss = 0.0
+            self.Long.Profit = 0.0
+            self.Long.AvgReturn = 0.0
         self.Long.WinTrades = np.count_nonzero(LongPL.clip_lower(0))
-        self.Long.WinMax = LongPL.max()
         if self.Long.WinTrades > 0:
+            self.Long.WinMax = LongPL.max()
             self.Long.WinAverage = self.Long.GrossProfit / self.Long.WinTrades
             self.Long.WinReturn = self.Long.Pct[self.Long.Pct > 0].mean()
             self.Long.WinRatio = self.Long.WinTrades / self.Long.Trades
         else:
+            self.Long.WinMax = 0.0
             self.Long.WinAverage = 0.0
             self.Long.WinReturn = 0.0
             self.Long.WinRatio = 0.0
         self.Long.LossTrades = np.count_nonzero(LongPL.clip_upper(0))
-        self.Long.LossMax = LongPL.min()
         if self.Long.LossTrades > 0:
+            self.Long.LossMax = LongPL.min()
             self.Long.LossAverage = self.Long.GrossLoss / self.Long.LossTrades
         else:
-            self.Long.LossAverage = 0
+            self.Long.LossMax = 0.0
+            self.Long.LossAverage = 0.0
 
         # ショート統計
         ShortPL = DataFrame['ShortPL']
@@ -317,26 +332,34 @@ class BacktestReport:
         self.Short.PL = ShortPL
         self.Short.Pct = DataFrame['ShortPct']
         self.Short.Trades = np.count_nonzero(ShortPL)
-        self.Short.GrossProfit = ShortPL.clip_lower(0).sum()
-        self.Short.GrossLoss = ShortPL.clip_upper(0).sum()
-        self.Short.Profit = self.Short.GrossProfit + self.Short.GrossLoss
-        self.Short.AvgReturn = self.Short.Pct[self.Short.Pct!=0].mean()
+        if self.Short.Trades > 0:
+            self.Short.GrossProfit = ShortPL.clip_lower(0).sum()
+            self.Short.GrossLoss = ShortPL.clip_upper(0).sum()
+            self.Short.Profit = self.Short.GrossProfit + self.Short.GrossLoss
+            self.Short.AvgReturn = self.Short.Pct[self.Short.Pct!=0].mean()
+        else:
+            self.Short.GrossProfit = 0.0
+            self.Short.GrossLoss = 0.0
+            self.Short.Profit = 0.0
+            self.Short.AvgReturn = 0.0
         self.Short.WinTrades = np.count_nonzero(ShortPL.clip_lower(0))
-        self.Short.WinMax = ShortPL.max()
         if self.Short.WinTrades > 0:
+            self.Short.WinMax = ShortPL.max()
             self.Short.WinAverage = self.Short.GrossProfit / self.Short.WinTrades
             self.Short.WinReturn = self.Short.Pct[self.Short.Pct > 0].mean()
             self.Short.WinRatio = self.Short.WinTrades / self.Short.Trades
         else:
+            self.Short.WinMax = 0.0
             self.Short.WinAverage = 0.0
             self.Short.WinReturn = 0.0
             self.Short.WinRatio = 0.0
         self.Short.LossTrades = np.count_nonzero(ShortPL.clip_upper(0))
-        self.Short.LossMax = ShortPL.min()
         if self.Short.LossTrades > 0:
+            self.Short.LossMax = ShortPL.min()
             self.Short.LossAverage = self.Short.GrossLoss / self.Short.LossTrades
         else:
-            self.Short.LossTrades = 0
+            self.Short.LossMax = 0.0
+            self.Short.LossTrades = 0.0
 
         # 資産
         self.Equity = (LongPL + ShortPL).cumsum()
@@ -356,9 +379,12 @@ class BacktestReport:
         self.All.AvgReturn = (self.Long.AvgReturn + self.Short.AvgReturn) / 2
         self.All.DrawDown = (self.Equity.cummax() - self.Equity).max()
         self.All.ProfitFactor = self.All.GrossProfit / -self.All.GrossLoss if -self.All.GrossLoss > 0 else 0
-        pct = pd.concat([self.Long.Pct, self.Short.Pct])
-        pct = pct[pct > 0]
-        self.All.SharpeRatio = pct.mean() / pct.std()
+        if self.All.Trades > 0:
+            pct = pd.concat([self.Long.Pct, self.Short.Pct])
+            pct = pct[pct > 0]
+            self.All.SharpeRatio = pct.mean() / pct.std()
+        else:
+            self.All.SharpeRatio = 0.0
         self.All.RecoveryFactor = self.All.ProfitFactor / self.All.DrawDown if self.All.DrawDown > 0 else 0
         self.All.ExpectedProfit = (self.All.WinAverage * self.All.WinRatio) + ((1 - self.All.WinRatio) * self.All.LossAverage)
         self.All.ExpectedValue = (self.All.WinRatio * (self.All.WinAverage / abs(self.All.LossAverage))) - (1 - self.All.WinRatio) if self.All.LossAverage < 0 else 1
