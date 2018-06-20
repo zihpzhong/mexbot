@@ -311,20 +311,22 @@ class BacktestReport:
         if self.Long.WinTrades > 0:
             self.Long.WinMax = LongPL.max()
             self.Long.WinAverage = self.Long.GrossProfit / self.Long.WinTrades
-            self.Long.WinReturn = self.Long.Pct[self.Long.Pct > 0].mean()
+            self.Long.WinPct = self.Long.Pct[self.Long.Pct > 0].mean()
             self.Long.WinRatio = self.Long.WinTrades / self.Long.Trades
         else:
             self.Long.WinMax = 0.0
             self.Long.WinAverage = 0.0
-            self.Long.WinReturn = 0.0
+            self.Long.WinPct = 0.0
             self.Long.WinRatio = 0.0
         self.Long.LossTrades = np.count_nonzero(LongPL.clip_upper(0))
         if self.Long.LossTrades > 0:
             self.Long.LossMax = LongPL.min()
             self.Long.LossAverage = self.Long.GrossLoss / self.Long.LossTrades
+            self.Long.LossPct = self.Long.Pct[self.Long.Pct < 0].mean()
         else:
             self.Long.LossMax = 0.0
             self.Long.LossAverage = 0.0
+            self.Long.LossPct = 0.0
 
         # ショート統計
         ShortPL = DataFrame['ShortPL']
@@ -346,20 +348,22 @@ class BacktestReport:
         if self.Short.WinTrades > 0:
             self.Short.WinMax = ShortPL.max()
             self.Short.WinAverage = self.Short.GrossProfit / self.Short.WinTrades
-            self.Short.WinReturn = self.Short.Pct[self.Short.Pct > 0].mean()
+            self.Short.WinPct = self.Short.Pct[self.Short.Pct > 0].mean()
             self.Short.WinRatio = self.Short.WinTrades / self.Short.Trades
         else:
             self.Short.WinMax = 0.0
             self.Short.WinAverage = 0.0
-            self.Short.WinReturn = 0.0
+            self.Short.WinPct = 0.0
             self.Short.WinRatio = 0.0
         self.Short.LossTrades = np.count_nonzero(ShortPL.clip_upper(0))
         if self.Short.LossTrades > 0:
             self.Short.LossMax = ShortPL.min()
             self.Short.LossAverage = self.Short.GrossLoss / self.Short.LossTrades
+            self.Short.LossPct = self.Short.Pct[self.Short.Pct < 0].mean()
         else:
             self.Short.LossMax = 0.0
             self.Short.LossTrades = 0.0
+            self.Short.LossPct = 0.0
 
         # 資産
         self.Equity = (LongPL + ShortPL).cumsum()
@@ -368,23 +372,24 @@ class BacktestReport:
         self.All = dotdict()
         self.All.Trades = self.Long.Trades + self.Short.Trades
         self.All.WinTrades = self.Long.WinTrades + self.Short.WinTrades
-        self.All.WinReturn = (self.Long.WinReturn + self.Short.WinReturn) / 2
+        self.All.WinPct = (self.Long.WinPct + self.Short.WinPct) / 2
         self.All.WinRatio = self.All.WinTrades / self.All.Trades if self.All.Trades > 0 else 0.0
         self.All.LossTrades = self.Long.LossTrades + self.Short.LossTrades
         self.All.GrossProfit = self.Long.GrossProfit + self.Short.GrossProfit
         self.All.GrossLoss = self.Long.GrossLoss + self.Short.GrossLoss
         self.All.WinAverage = self.All.GrossProfit / self.All.WinTrades if self.All.WinTrades > 0 else 0
+        self.All.LossPct = (self.Long.LossPct + self.Short.LossPct) / 2
         self.All.LossAverage = self.All.GrossLoss / self.All.LossTrades if self.All.LossTrades > 0 else 0
         self.All.Profit = self.All.GrossProfit + self.All.GrossLoss
         self.All.AvgReturn = (self.Long.AvgReturn + self.Short.AvgReturn) / 2
         self.All.DrawDown = (self.Equity.cummax() - self.Equity).max()
         self.All.ProfitFactor = self.All.GrossProfit / -self.All.GrossLoss if -self.All.GrossLoss > 0 else 0
-        if self.All.Trades > 0:
+        if self.All.Trades > 1:
             pct = pd.concat([self.Long.Pct, self.Short.Pct])
             pct = pct[pct > 0]
             self.All.SharpeRatio = pct.mean() / pct.std()
         else:
-            self.All.SharpeRatio = 0.0
+            self.All.SharpeRatio = 1.0
         self.All.RecoveryFactor = self.All.ProfitFactor / self.All.DrawDown if self.All.DrawDown > 0 else 0
         self.All.ExpectedProfit = (self.All.WinAverage * self.All.WinRatio) + ((1 - self.All.WinRatio) * self.All.LossAverage)
         self.All.ExpectedValue = (self.All.WinRatio * (self.All.WinAverage / abs(self.All.LossAverage))) - (1 - self.All.WinRatio) if self.All.LossAverage < 0 else 1
@@ -396,11 +401,12 @@ class BacktestReport:
         '  WinTrades :' + str(self.Long.WinTrades) + '\n' \
         '  WinMax :' + str(self.Long.WinMax) + '\n' \
         '  WinAverage :' + str(self.Long.WinAverage) + '\n' \
-        '  WinReturn :' + str(self.Long.WinReturn) + '\n' \
+        '  WinPct :' + str(self.Long.WinPct) + '\n' \
         '  WinRatio :' + str(self.Long.WinRatio) + '\n' \
         '  LossTrades :' + str(self.Long.LossTrades) + '\n' \
         '  LossMax :' + str(self.Long.LossMax) + '\n' \
         '  LossAverage :' + str(self.Long.LossAverage) + '\n' \
+        '  LossPct :' + str(self.Long.LossPct) + '\n' \
         '  GrossProfit :' + str(self.Long.GrossProfit) + '\n' \
         '  GrossLoss :' + str(self.Long.GrossLoss) + '\n' \
         '  Profit :' + str(self.Long.Profit) + '\n' \
@@ -410,11 +416,12 @@ class BacktestReport:
         '  WinTrades :' + str(self.Short.WinTrades) + '\n' \
         '  WinMax :' + str(self.Short.WinMax) + '\n' \
         '  WinAverage :' + str(self.Short.WinAverage) + '\n' \
-        '  WinReturn :' + str(self.Short.WinReturn) + '\n' \
+        '  WinPct :' + str(self.Short.WinPct) + '\n' \
         '  WinRatio :' + str(self.Short.WinRatio) + '\n' \
         '  LossTrades :' + str(self.Short.LossTrades) + '\n' \
         '  LossMax :' + str(self.Short.LossMax) + '\n' \
         '  LossAverage :' + str(self.Short.LossAverage) + '\n' \
+        '  LossPct :' + str(self.Short.LossPct) + '\n' \
         '  GrossProfit :' + str(self.Short.GrossProfit) + '\n' \
         '  GrossLoss :' + str(self.Short.GrossLoss) + '\n' \
         '  Profit :' + str(self.Short.Profit) + '\n' \
@@ -423,10 +430,11 @@ class BacktestReport:
         '  Trades :' + str(self.All.Trades) + '\n' \
         '  WinTrades :' + str(self.All.WinTrades) + '\n' \
         '  WinAverage :' + str(self.All.WinAverage) + '\n' \
-        '  WinReturn :' + str(self.All.WinReturn) + '\n' \
+        '  WinPct :' + str(self.All.WinPct) + '\n' \
         '  WinRatio :' + str(self.All.WinRatio) + '\n' \
         '  LossTrades :' + str(self.All.LossTrades) + '\n' \
         '  LossAverage :' + str(self.All.LossAverage) + '\n' \
+        '  LossPct :' + str(self.All.LossPct) + '\n' \
         '  GrossProfit :' + str(self.All.GrossProfit) + '\n' \
         '  GrossLoss :' + str(self.All.GrossLoss) + '\n' \
         '  Profit :' + str(self.All.Profit) + '\n' \
