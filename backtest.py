@@ -18,13 +18,13 @@ def calclots(capital, price, percent, lot):
     else:
         return lot
 
-# @jit(void(f8[:],f8[:],f8[:],f8[:],i8,
-#     b1[:],b1[:],b1[:],b1[:],
-#     f8[:],f8[:],f8[:],f8[:],
-#     f8[:],f8[:],f8[:],f8[:],
-#     f8[:],f8[:],f8,f8,
-#     f8,f8[:],f8[:],f8,f8,f8,f8,
-#     f8[:],f8[:],f8[:],f8[:],f8[:],f8[:]), nopython=True)
+@jit(void(f8[:],f8[:],f8[:],f8[:],i8,
+    b1[:],b1[:],b1[:],b1[:],
+    f8[:],f8[:],f8[:],f8[:],
+    f8[:],f8[:],f8[:],f8[:],
+    f8[:],f8[:],f8,f8,
+    f8,f8[:],f8[:],f8,f8,f8,f8,
+    f8[:],f8[:],f8[:],f8[:],f8[:],f8[:]), nopython=True)
 def BacktestCore(Open, High, Low, Close, N,
     buy_entry, sell_entry, buy_exit, sell_exit,
     stop_buy_entry, stop_sell_entry, stop_buy_exit, stop_sell_exit,
@@ -329,15 +329,15 @@ def Backtest(ohlcv,
     nopython=True)
 def BacktestWithTickDataCore(ticks_price, ticks_buy, ticks_sell, ticks_size, ticks_avg_size, N,
     buy_entry, sell_entry, buy_exit, sell_exit,
-    buy_limit_entry, sell_limit_entry, buy_limit_exit, sell_limit_exit,
+    limit_buy_entry, limit_sell_entry, limit_buy_exit, limit_sell_exit,
     buy_size, sell_size, max_buy_size, max_sell_size,
     buy_trade, buy_pnl, buy_pct, sell_trade, sell_pnl, sell_pct):
 
     last_buy_price = ticks_price[0]
     last_sell_price = ticks_price[0]
 
-    buy_avg_price = buy_pos_size = buy_limit_entry_price = buy_limit_exit_price = 0
-    sell_avg_price = sell_pos_size = sell_limit_entry_price = sell_limit_exit_price = 0
+    buy_avg_price = buy_pos_size = limit_buy_entry_price = limit_buy_exit_price = 0
+    sell_avg_price = sell_pos_size = limit_sell_entry_price = limit_sell_exit_price = 0
 
     delay = 1
     for n in range(delay, N):
@@ -365,11 +365,11 @@ def BacktestWithTickDataCore(ticks_price, ticks_buy, ticks_sell, ticks_size, tic
             if buy_entry[n-1] > 0:
                 open_price = last_buy_price
             # 指値注文
-            if buy_limit_entry[n-1] > 0:
-                buy_limit_entry_price = buy_limit_entry[n-1]
-            if buy_limit_entry_price > 0 and last_buy_price <= buy_limit_entry_price:
-                open_price = buy_limit_entry_price
-                buy_limit_entry_price = 0
+            if limit_buy_entry[n-1] > 0:
+                limit_buy_entry_price = limit_buy_entry[n-1]
+            if limit_buy_entry_price > 0 and last_buy_price <= limit_buy_entry_price:
+                open_price = limit_buy_entry_price
+                limit_buy_entry_price = 0
             # 約定処理
             if open_price > 0:
                 buy_trade[n] = open_price #買いポジションオープン
@@ -384,11 +384,11 @@ def BacktestWithTickDataCore(ticks_price, ticks_buy, ticks_sell, ticks_size, tic
             if buy_exit[n-1] > 0:
                 close_price =last_sell_price
             # 指値注文
-            if buy_limit_exit[n-1] > 0:
-                buy_limit_exit_price = buy_limit_exit[n-1]
-            if buy_limit_exit_price > 0 and last_sell_price >= buy_limit_exit_price:
-                close_price = buy_limit_exit_price
-                buy_limit_exit_price = 0
+            if limit_buy_exit[n-1] > 0:
+                limit_buy_exit_price = limit_buy_exit[n-1]
+            if limit_buy_exit_price > 0 and last_sell_price >= limit_buy_exit_price:
+                close_price = limit_buy_exit_price
+                limit_buy_exit_price = 0
             # 約定処理
             if close_price > 0:
                 buy_trade[n] = -close_price #買いポジションクローズ
@@ -403,11 +403,11 @@ def BacktestWithTickDataCore(ticks_price, ticks_buy, ticks_sell, ticks_size, tic
             if sell_entry[n-1] > 0:
                 open_price = last_sell_price
             # 指値注文
-            if sell_limit_entry[n-1] > 0:
-                sell_limit_entry_price = sell_limit_entry[n-1]
-            if sell_limit_entry_price > 0 and last_sell_price >= sell_limit_entry_price:
-                open_price = sell_limit_entry_price
-                sell_limit_entry_price = 0
+            if limit_sell_entry[n-1] > 0:
+                limit_sell_entry_price = limit_sell_entry[n-1]
+            if limit_sell_entry_price > 0 and last_sell_price >= limit_sell_entry_price:
+                open_price = limit_sell_entry_price
+                limit_sell_entry_price = 0
             # 約定処理
             if open_price > 0:
                 sell_trade[n] = open_price #売りポジションオープン
@@ -422,11 +422,11 @@ def BacktestWithTickDataCore(ticks_price, ticks_buy, ticks_sell, ticks_size, tic
             if sell_exit[n-1] > 0:
                 close_price =last_buy_price
             # 指値注文
-            if sell_limit_exit[n-1] > 0:
-                sell_limit_exit_price = sell_limit_exit[n-1]
-            if sell_limit_exit_price > 0 and last_buy_price <= sell_limit_exit_price:
-                close_price = sell_limit_exit_price
-                sell_limit_exit_price = 0
+            if limit_sell_exit[n-1] > 0:
+                limit_sell_exit_price = limit_sell_exit[n-1]
+            if limit_sell_exit_price > 0 and last_buy_price <= limit_sell_exit_price:
+                close_price = limit_sell_exit_price
+                limit_sell_exit_price = 0
             # 約定処理
             if close_price > 0:
                 sell_trade[n] = -close_price #売りポジションクローズ
@@ -434,10 +434,21 @@ def BacktestWithTickDataCore(ticks_price, ticks_buy, ticks_sell, ticks_size, tic
                 sell_pct[n] = sell_pnl[n] / sell_avg_price
                 sell_pos_size = sell_avg_price = 0
 
+    # ポジションクローズ
+    if close_price > 0:
+        buy_trade[N-1] = -last_sell_price #買いポジションクローズ
+        buy_pnl[N-1] = (last_sell_price - buy_avg_price) * buy_pos_size #損益確定
+        buy_pct[N-1] = buy_pnl[N-1] / buy_avg_price
+
+    if sell_avg_price > 0:
+        sell_trade[N-1] = -last_buy_price #売りポジションクローズ
+        sell_pnl[N-1] = (sell_avg_price - last_buy_price) * sell_pos_size #損益確定
+        sell_pct[N-1] = sell_pnl[N-1] / sell_avg_price
+
 
 def BacktestWithTickData(ticks,
     buy_entry=None, sell_entry=None, buy_exit=None, sell_exit=None,
-    buy_limit_entry=None, sell_limit_entry=None, buy_limit_exit=None, sell_limit_exit=None,
+    limit_buy_entry=None, limit_sell_entry=None, limit_buy_exit=None, limit_sell_exit=None,
     buy_size=1.0, sell_size=1.0, max_buy_size=1.0, max_sell_size=1.0,
     **kwargs):
 
@@ -467,15 +478,15 @@ def BacktestWithTickData(ticks,
     buy_exit = bool_place_holder if buy_exit is None else buy_exit.values
     sell_exit = bool_place_holder if sell_exit is None else sell_exit.values
 
-    buy_limit_entry = place_holder if buy_limit_entry is None else buy_limit_entry.values
-    sell_limit_entry = place_holder if sell_limit_entry is None else sell_limit_entry.values
-    buy_limit_exit = place_holder if buy_limit_exit is None else buy_limit_exit.values
-    sell_limit_exit = place_holder if sell_limit_exit is None else sell_limit_exit.values
+    limit_buy_entry = place_holder if limit_buy_entry is None else limit_buy_entry.values
+    limit_sell_entry = place_holder if limit_sell_entry is None else limit_sell_entry.values
+    limit_buy_exit = place_holder if limit_buy_exit is None else limit_buy_exit.values
+    limit_sell_exit = place_holder if limit_sell_exit is None else limit_sell_exit.values
 
     BacktestWithTickDataCore(
         ticks_price, ticks_buy, ticks_sell, ticks_size, ticks_avg_size, N,
         buy_entry, sell_entry, buy_exit, sell_exit,
-        buy_limit_entry, sell_limit_entry, buy_limit_exit, sell_limit_exit,
+        limit_buy_entry, limit_sell_entry, limit_buy_exit, limit_sell_exit,
         float(buy_size), float(sell_size), float(max_buy_size), float(max_sell_size),
         buy_trade, buy_pnl, buy_pct, sell_trade, sell_pnl, sell_pct)
 
