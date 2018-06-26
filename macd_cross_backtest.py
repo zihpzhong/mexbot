@@ -93,6 +93,7 @@ if __name__ == '__main__':
     parser.add_argument('csv', nargs='?', type=argparse.FileType('r'), default=sys.stdin)
     parser.add_argument("--start", type=store_datetime)
     parser.add_argument("--end", type=store_datetime)
+    parser.add_argument("--max_evals", dest='max_evals', type=int, default=0)
     args = parser.parse_args()
 
     ohlcv = pd.read_csv(args.csv, index_col='timestamp', parse_dates=True)
@@ -122,6 +123,6 @@ if __name__ == '__main__':
         # 'smaslowlen': hp.quniform('smaslowlen', 1, 100, 1),
     }
 
-    best, report = BacktestIteration(macd_cross_backtest, default_parameters, hyperopt_parameters, 0, maximize=lambda r:r.All.ProfitFactor)
+    best, report = BacktestIteration(macd_cross_backtest, default_parameters, hyperopt_parameters, args.max_evals)
     report.DataFrame.to_csv('TradeData.csv')
     report.Equity.to_csv('Equity.csv')

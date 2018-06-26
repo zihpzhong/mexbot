@@ -88,7 +88,7 @@ def stoch(close, high, low, period):
     return 100 * (close - lline) / (hline - lline)
 
 def momentum(source, period):
-    return source / source.shift(period)
+    return source / source.shift(int(period))
 
 def bband(source, period, mult=2.0):
     period = int(period)
