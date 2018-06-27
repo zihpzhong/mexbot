@@ -56,6 +56,8 @@ def BacktestCore(Open, High, Low, Close, N,
             # 指値注文
             if limit_buy_entry[i-1] > 0:
                 buyLimitEntry = limit_buy_entry[i-1]
+            elif limit_buy_entry[i-1] < 0:
+                buyLimitEntry = 0
             if buyLimitEntry > 0 and Low[i] <= buyLimitEntry:
                 OpenPrice = buyLimitEntry
                 buyLimitEntry = 0
@@ -120,8 +122,10 @@ def BacktestCore(Open, High, Low, Close, N,
             if sell_entry[i-1] > 0:
                 OpenPrice = Open[i]
             # 指値注文
-            if limit_sell_entry[i-1]:
+            if limit_sell_entry[i-1] > 0:
                 sellLimitEntry = limit_sell_entry[i-1]
+            elif limit_sell_entry[i-1] < 0:
+                sellLimitEntry = 0
             if sellLimitEntry > 0 and High[i] >= sellLimitEntry:
                 OpenPrice = sellLimitEntry
                 sellLimitEntry = 0

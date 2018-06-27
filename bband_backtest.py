@@ -6,55 +6,39 @@ from indicator import *
 
 
 def bband_backtest(ohlcv, length, multi):
-    ignore = int(length)
 
     # インジケーター作成
-    source = ohlcv.close
-    upper, lower, basis, sigma = bband(source, length, multi)
-
-    buyEntry = crossover(source, lower)
-    sellEntry = crossunder(source, upper)
+    upper, lower, basis, sigma = bband(ohlcv.close, length, multi)
 
     # エントリー／イグジット
-    buy_entry = buyEntry
-    buy_exit = sellEntry
-    sell_entry = sellEntry
-    sell_exit = buyEntry
+    limit_buy_entry = lower
+    limit_buy_exit = basis
+    limit_sell_entry = upper
+    limit_sell_exit = basis
 
-    buy_entry[:ignore] = False
-    buy_exit[:ignore] = False
-    sell_entry[:ignore] = False
-    sell_exit[:ignore] = False
+    ignore = int(length)
+    limit_buy_entry[:ignore] = 0
+    limit_buy_exit[:ignore] = 0
+    limit_sell_entry[:ignore] = 0
+    limit_sell_exit[:ignore] = 0
 
-    # buy_entry_price = upper
-    # buy_entry_price[~buyEntry] = 0
-
-    # sell_entry_price = lower
-    # sell_entry_price[~sellEntry] = 0
-
-    # buy_exit_price = sell_entry_price
-    # sell_exit_price = buy_entry_price
-
-    # buy_entry_price[:ignore] = 0
-    # buy_exit_price[:ignore] = 0
-    # sell_entry_price[:ignore] = 0
-    # sell_exit_price[:ignore] = 0
-
-    # entry_exit = pd.DataFrame({'close':ohlcv.close, 'upper':upper, 'lower':lower,
-    # 	'buy_entry':buy_entry, 'buy_exit':buy_exit, 'sell_entry':sell_entry, 'sell_exit':sell_exit})
-    # entry_exit.to_csv('entry_exit.csv')
+    # 売り買い優劣でエントリー抑制
+    buy_volume = rsi(ohlcv.buy_volume, length)
+    sell_volume = rsi(ohlcv.sell_volume, length)
+    limit_buy_entry[buy_volume < sell_volume] = -1
+    limit_sell_entry[buy_volume > sell_volume] = -1
 
     return Backtest(**locals())
 
 if __name__ == '__main__':
 
     # テストデータ読み込み
-    ohlcv = pd.read_csv('csv/bitmex_2018_1h.csv', index_col='timestamp', parse_dates=True)
+    ohlcv = pd.read_csv('csv/bffx_20180618_3s.csv', index_col='timestamp', parse_dates=True)
 
     default_parameters = {
         'ohlcv': ohlcv,
-        'length':20,
-        'multi':2,
+        'length':6,
+        'multi':1.6,
     }
 
     hyperopt_parameters = {
