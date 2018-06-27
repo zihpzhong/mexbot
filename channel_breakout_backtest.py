@@ -4,8 +4,7 @@ from backtest import Backtest, BacktestReport, BacktestIteration
 from hyperopt import hp
 from indicator import *
 
-def channel_breakout_backtest(ohlcv, breakout_in, breakout_out, fastperiod, slowperiod, filterth, klot):
-    ignore = int(max([breakout_in, breakout_out, fastperiod, slowperiod]))
+def channel_breakout_backtest(ohlcv, breakout_in, breakout_out):
 
     # エントリー・エグジット
     stop_buy_entry = highest(ohlcv.high, breakout_in) + 0.5
@@ -14,49 +13,15 @@ def channel_breakout_backtest(ohlcv, breakout_in, breakout_out, fastperiod, slow
     stop_sell_exit = highest(ohlcv.high, breakout_out) + 0.5
 
     # 値が確定するまでの間はノーポジ
+    ignore = int(max([breakout_in, breakout_out]))
     stop_buy_entry[:ignore] = 0
     stop_buy_exit[:ignore] = 0
     stop_sell_entry[:ignore] = 0
     stop_sell_exit[:ignore] = 0
 
-    # 2つの移動平均線の剥離によるエントリー制限
-    if filterth > 0:
-        fastsma = sma(ohlcv.close, fastperiod)
-        slowsma = sma(ohlcv.close, slowperiod)
-        ignoreEntry = (fastsma - slowsma).abs() > filterth
-        stop_buy_entry[ignoreEntry] = 0
-        stop_sell_entry[ignoreEntry] = 0
-
-    # 2つの移動平均線の剥離によるロット制限
-    if klot > 0:
-        fastsma = sma(ohlcv.close, fastperiod)
-        slowsma = sma(ohlcv.close, slowperiod)
-        sell_size = 1 - ((1 - (slowsma / fastsma)) * klot)
-        sell_size.clip(0.01, 1.0, inplace=True)
-        buy_size  = 1 - ((1 - (fastsma / slowsma)) * klot)
-        buy_size.clip(0.01, 1.0, inplace=True)
-
-    # ATRによるロット制限
-    # if klot > 0:
-    #     lots = atr(ohlcv.close, ohlcv.high, ohlcv.low, 14)
-    #     lots = 1 - (lots / klot)
-    #     lots.clip(0.001, 1.0, inplace=True)
-    #     lots = lots * 10
-    # else:
-    #     lots = 1
-
-    # 標準偏差によるロット制限
-    # if klot > 0:
-    #     lots = stdev(ohlcv.close, 20)
-    #     lots = 1 - (lots / klot)
-    #     lots.clip(0.001, 1.0, inplace=True)
-    #     lots = lots
-    # else:
-    #     lots = 1
-
     # バックテスト実施
     # entry_exit = pd.DataFrame({'close':ohlcv.close, 'open':ohlcv.open,
-    #     'stop_buy_entry':stop_buy_entry, 'stop_buy_exit':stop_buy_exit, 'stop_sell_entry':stop_sell_entry, 'stop_sell_exit':stop_sell_exit})#, index=ohlcv.index)
+    #     'stop_buy_entry':stop_buy_entry, 'stop_buy_exit':stop_buy_exit, 'stop_sell_entry':stop_sell_entry, 'stop_sell_exit':stop_sell_exit})
     # entry_exit.to_csv('entry_exit.csv')
 
     return Backtest(**locals())
@@ -73,21 +38,13 @@ if __name__ == '__main__':
         # 'fastperiod':89,
         # 'slowperiod':91,
         # 'filterth':19,
-        'fastperiod':16,
-        'slowperiod':22,
-        'filterth':0,
-        'klot':428,
     }
 
     hyperopt_parameters = {
-        # 'breakout_in': hp.quniform('breakout_in', 1, 100, 1),
-        # 'breakout_out': hp.quniform('breakout_out', 1, 100, 1),
-        # 'fastperiod': hp.quniform('fastperiod', 1, 300, 1),
-        # 'slowperiod': hp.quniform('slowperiod', 1, 300, 1),
-        #'filterth': hp.quniform('filterth', 1, 300, 1),
-        'klot': hp.loguniform('klot', 1, 10),
+        'breakout_in': hp.quniform('breakout_in', 1, 100, 1),
+        'breakout_out': hp.quniform('breakout_out', 1, 100, 1),
     }
 
-    best, report = BacktestIteration(channel_breakout_backtest, default_parameters, hyperopt_parameters, 0, maximize=lambda r:r.All.ProfitFactor)
+    best, report = BacktestIteration(channel_breakout_backtest, default_parameters, hyperopt_parameters, 300)
     report.DataFrame.to_csv('TradeData.csv')
     report.Equity.to_csv('Equity.csv')

@@ -6,7 +6,7 @@ from hyperopt import hp
 from indicator import *
 from functools import lru_cache
 
-def macd_cross_backtest(ohlcv, fastlen, slowlen, siglen, smafastlen, smaslowlen, filter, shrink):
+def macd_cross_backtest(ohlcv, fastlen, slowlen, siglen, smafastlen, smaslowlen):
 
     @lru_cache(maxsize=None)
     def cached_sma(period):
@@ -44,11 +44,9 @@ def macd_cross_backtest(ohlcv, fastlen, slowlen, siglen, smafastlen, smaslowlen,
         fund = cached_fund()
         buy_entry[fund.fundingRate > 0.000] = False
         sell_entry[fund.fundingRate < 0.000] = False
-        buy_exit[fund.fundingRate < 0.000] = False
-        sell_exit[fund.fundingRate > 0.000] = False
 
     # 2つの移動平均線によるエントリー制限
-    if filter:
+    if 0:
         fastsma = sma(ohlcv.close, smafastlen)
         slowsma = sma(ohlcv.close, smaslowlen)
         buy_entry[slowsma > fastsma] = False
@@ -59,20 +57,15 @@ def macd_cross_backtest(ohlcv, fastlen, slowlen, siglen, smafastlen, smaslowlen,
         buy_entry[vsig>0] = False
         sell_entry[vsig<0] = False
 
-    # 2つの移動平均線によるロット制限
-    if shrink:
-        fastsma = sma(ohlcv.close, smafastlen)
-        slowsma = sma(ohlcv.close, smaslowlen)
-        upper = 1.999
-        lower = 0.001
-        buy_size = upper - ((slowsma > fastsma) * (upper - lower))
-        buy_size = buy_size.shift(1)    # フィルターの条件と合わせるためシフトする
-        sell_size = upper - ((fastsma > slowsma) * (upper - lower))
-        sell_size = sell_size.shift(1)  # 注文は次の足で行われる
-
-    # buy_size = sell_size = 3000 / ohlcv.close
-    # initial_capital = 500
-    # percent_of_equity = 0.5
+    # ハイローフィルタ
+    if 1:
+        macd_high = highest(vmacd, smaslowlen)
+        macd_low = lowest(vmacd, smafastlen)
+        macd_middle = (macd_high + macd_low) / 2
+        buy_entry[vmacd > macd_middle] = False
+        sell_entry[vmacd < macd_middle] = False
+        buy_exit[vmacd < macd_middle] = False
+        sell_exit[vmacd > macd_middle] = False
 
     # entry_exit = pd.DataFrame({'close':ohlcv.close, 'macd':vmacd, 'sig':vsig, #'fsma':fastsma, 'ssma':slowsma, 'buy_size':buy_size, 'sell_size':sell_size,
     #     'buy_entry':buy_entry, 'buy_exit':buy_exit, 'sell_entry':sell_entry, 'sell_exit':sell_exit})#, index=ohlcv.index)
@@ -109,18 +102,16 @@ if __name__ == '__main__':
         'fastlen':19,
         'slowlen':27,
         'siglen':13,
-        'smafastlen':10,
-        'smaslowlen':95,
-        'filter':False,
-        'shrink':False,
+        'smafastlen':25,
+        'smaslowlen':17,
     }
 
     hyperopt_parameters = {
         'fastlen': hp.quniform('fastlen', 5, 50, 1),
         'slowlen': hp.quniform('slowlen', 5, 50, 1),
         'siglen': hp.quniform('siglen', 1, 50, 1),
-        # 'smafastlen': hp.quniform('smafastlen', 1, 100, 1),
-        # 'smaslowlen': hp.quniform('smaslowlen', 1, 100, 1),
+        'smafastlen': hp.quniform('smafastlen', 1, 100, 1),
+        'smaslowlen': hp.quniform('smaslowlen', 1, 100, 1),
     }
 
     best, report = BacktestIteration(macd_cross_backtest, default_parameters, hyperopt_parameters, args.max_evals)
