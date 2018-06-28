@@ -52,13 +52,25 @@ def market_make_backtest(ohlcv, period, margin):
     # sell_exit = buy_entry
 
     # 売り買い優劣でエントリー3
-    buy_volume = rsi(ohlcv.buy_volume, period)
-    sell_volume = rsi(ohlcv.sell_volume, period)
-    power = buy_volume - sell_volume
-    buy_entry = power > 0
-    sell_entry = power < 0
+    # buy_volume = rsi(ohlcv.buy_volume, period)
+    # sell_volume = rsi(ohlcv.sell_volume, period)
+    # power = buy_volume - sell_volume
+    # buy_entry = power > 0
+    # sell_entry = power < 0
+    # buy_exit = sell_entry
+    # sell_exit = buy_entry
+
+    # 出来高でエントリー
+    no = pd.Series(range(len(ohlcv)), index=ohlcv.index)
+    plus_minus_sum = ohlcv.plus_minus.cumsum()
+    corr_plus_minus_sum = plus_minus_sum.rolling(3).corr(no)
+    buy_entry = crossover(corr_plus_minus_sum, 0.2)
+    sell_entry = crossunder(corr_plus_minus_sum, -0.2)
     buy_exit = sell_entry
     sell_exit = buy_entry
+
+    # signed_volume_sum = ohlcv.signed_volume.cumsum()
+    # corr_signed_volume_sum = signed_volume_sum.rolling(100).corr(ohlcv['id'])
 
     # 売り買い優劣でエントリー価格を調整2
     # buy_volume = rsi(ohlcv.buy_volume, 10)
@@ -77,12 +89,12 @@ def market_make_backtest(ohlcv, period, margin):
     # limit_sell_entry = limit_sell_entry + (sell_volume > restrict_volume) * 50
     # limit_sell_exit = limit_sell_exit + (sell_volume > restrict_volume) * 50
 
-    range_high = highest(ohlcv.high, period)
-    range_low = lowest(ohlcv.low, period)
-    limit_buy_entry = range_low
-    limit_buy_exit = range_high
-    limit_sell_entry = range_high
-    limit_sell_exit = range_low
+    # range_high = highest(ohlcv.high, period)
+    # range_low = lowest(ohlcv.low, period)
+    # limit_buy_entry = range_low
+    # limit_buy_exit = range_high
+    # limit_sell_entry = range_high
+    # limit_sell_exit = range_low
 
     # バックテスト実施
     # entry_exit = pd.DataFrame({'close':ohlcv['close'], 'high':ohlcv['high'], 'low':ohlcv['low'],
