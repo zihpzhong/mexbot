@@ -439,7 +439,7 @@ def BacktestWithTickDataCore(ticks_price, ticks_buy, ticks_sell, ticks_size, tic
                 sell_pos_size = sell_avg_price = 0
 
     # ポジションクローズ
-    if close_price > 0:
+    if buy_avg_price > 0:
         buy_trade[N-1] = -last_sell_price #買いポジションクローズ
         buy_pnl[N-1] = (last_sell_price - buy_avg_price) * buy_pos_size #損益確定
         buy_pct[N-1] = buy_pnl[N-1] / buy_avg_price
