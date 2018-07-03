@@ -343,8 +343,7 @@ def BacktestWithTickDataCore(ticks_price, ticks_buy, ticks_sell, ticks_size, tic
     buy_avg_price = buy_pos_size = limit_buy_entry_price = limit_buy_exit_price = 0
     sell_avg_price = sell_pos_size = limit_sell_entry_price = limit_sell_exit_price = 0
 
-    delay = 1
-    for n in range(delay, N):
+    for n in range(1, N):
         buy_now = False
         sell_now = False
 
@@ -456,7 +455,7 @@ def BacktestWithTickData(ticks,
     buy_size=1.0, sell_size=1.0, max_buy_size=1.0, max_sell_size=1.0,
     **kwargs):
 
-    ticks_price = ticks['price'].values # 値段
+    ticks_price = ticks['price'].values.astype(float) # 値段
     ticks_buy = ((ticks['side'] == 'buy') | (ticks['side'] == 'Buy') | (ticks['side'] == 'BUY')).values # テイカー買いポジション
     ticks_sell = ((ticks['side'] == 'sell') | (ticks['side'] == 'Sell') | (ticks['side'] == 'SELL')).values # テイカー売りポジション
     ticks_size = ticks['size']
