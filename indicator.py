@@ -88,7 +88,7 @@ def stoch(close, high, low, period):
     return 100 * (close - lline) / (hline - lline)
 
 def momentum(source, period):
-    return source / source.shift(int(period))
+    return source - source.shift(int(period))
 
 def bband(source, period, mult=2.0):
     period = int(period)
@@ -393,9 +393,12 @@ def polyfline(source, period, deg=2):
         poly[i] = p(period-1)
     return pd.Series(poly, index=source.index)
 
-def corr(source, other, period):
+def correlation(source_a, source_b, period):
     period = int(period)
-    return source.rolling(period).corr(other)
+    return source_a.rolling(period).corr(source_b)
+
+def cumsum(source, period):
+    return source.rolling(int(period)).sum()
 
 if __name__ == '__main__':
 

@@ -96,6 +96,9 @@ class Strategy:
         self.ohlcv = None
         self.ohlcv_updated = False
 
+        # WebSocket
+        self.ws = None
+
         # ログ設定
         self.logger = logging.getLogger(__name__)
 
@@ -377,6 +380,29 @@ class Strategy:
                 if timestamp[-1] >= next_fetch_time:
                     self.ohlcv_updated = True
 
+    def reconnect_websocket(self):
+        # 再接続が必要がチェック
+        need_reconnect = False
+        if self.ws is None:
+            need_reconnect = True
+        else:
+            if self.ws.connected == False:
+                self.ws.exit()
+                need_reconnect = True
+
+        # 再接続
+        if need_reconnect:
+            market = self.exchange.market(self.settings.symbol)
+            # ストリーミング設定
+            if self.testnet.use:
+                self.ws = BitMEXWebsocket(endpoint='wss://testnet.bitmex.com/realtime', symbol=market['id'],
+                    api_key=self.testnet.apiKey, api_secret=self.testnet.secret)
+            else:
+                self.ws = BitMEXWebsocket(endpoint='wss://www.bitmex.com', symbol=market['id'],
+                    api_key=self.settings.apiKey, api_secret=self.settings.secret)
+            # ネットワーク負荷の高いトピックの配信を停止
+            self.ws.unsubscribe(['orderBookL2'])
+
     def setup(self):
         # 取引所セットアップ
         if self.testnet.use:
@@ -404,17 +430,6 @@ class Strategy:
         self.logger.info('{symbol}: taker:{taker}'.format(**market))
         self.logger.info('{symbol}: maker:{maker}'.format(**market))
         self.logger.info('{symbol}: type:{type}'.format(**market))
-
-        # ストリーミング設定
-        # if self.testnet.use:
-        #     self.ws = BitMEXWebsocket(endpoint='wss://testnet.bitmex.com/realtime', symbol=market['id'],
-        #         api_key=self.testnet.apiKey, api_secret=self.testnet.secret)
-        # else:
-        #     self.ws = BitMEXWebsocket(endpoint='wss://www.bitmex.com', symbol=market['id'],
-        #         api_key=self.settings.apiKey, api_secret=self.settings.secret)
-
-        # ネットワーク負荷の高いトピックの配信を停止
-        # self.ws.unsubscribe(['orderBookL2'])
 
     def add_arguments(self, parser):
         parser.add_argument('--apiKey', type=str, default=self.settings.apiKey)
@@ -456,14 +471,17 @@ class Strategy:
                     sleep(errorWait)
                     errorWait = 0
 
+                # WebSocketの接続が切れていたら再接続
+                self.reconnect_websocket()
+
                 # ティッカー取得
-                self.ticker = self.fetch_ticker()
+                self.ticker = self.fetch_ticker_ws()
 
                 # ポジション取得
-                self.position = self.fetch_position()
+                self.position = self.fetch_position_ws()
 
                 # 資金情報取得
-                self.balance = self.fetch_balance()
+                self.balance = self.fetch_balance_ws()
 
                 # 足取得（足確定後取得）
                 self.update_ohlcv(ticker_time=self.ticker.datetime)
