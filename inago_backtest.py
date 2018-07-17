@@ -10,8 +10,8 @@ def inago_backtest(ohlcv, buyth, sellth, eventh):
 
     # エントリー／イグジット
     cond = (ohlcv.buy_volume > buyth) & (ohlcv.sell_volume > sellth) & ((ohlcv.buy_volume - ohlcv.sell_volume).abs() > eventh)
-    buy_entry = (ohlcv.buy_volume > ohlcv.sell_volume) & cond
-    sell_entry = (ohlcv.buy_volume < ohlcv.sell_volume) & cond
+    buy_entry = (ohlcv.buy_volume > ohlcv.sell_volume) & cond & (change(ohlcv.close,3)<2000)
+    sell_entry = (ohlcv.buy_volume < ohlcv.sell_volume) & cond & (change(ohlcv.close,3)>-2000)
     buy_exit = sell_entry
     sell_exit = buy_entry
 
@@ -29,9 +29,9 @@ if __name__ == '__main__':
 
     default_parameters = {
         'ohlcv':ohlcv,
-        'buyth':86,
-        'sellth':76,
-        'eventh':5,
+        'buyth':20,
+        'sellth':20,
+        'eventh':40,
     }
 
     hyperopt_parameters = {
@@ -43,8 +43,8 @@ if __name__ == '__main__':
     def maximize(r):
         return ((r.All.WinRatio * r.All.WinPct) + ((1 - r.All.WinRatio) * r.All.LossPct)) * r.All.Trades
         # return r.All.WinPct * r.All.WinRatio * r.All.WinTrades
-        # return r.All.Profit# - r.All.DrawDown
+        # return r.All.Profit
 
-    best, report = BacktestIteration(inago_backtest, default_parameters, hyperopt_parameters, 1000, maximize=maximize)
+    best, report = BacktestIteration(inago_backtest, default_parameters, hyperopt_parameters, 0, maximize=maximize)
     report.DataFrame.to_csv('TradeData.csv')
     report.Equity.to_csv('Equity.csv')
